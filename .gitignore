@@ -1,0 +1,8 @@
+target/
+profiling-data/
+**/*.rs.bk
+*.pdb
+*.kate-swp
+perf.data
+perf.data.old
+cachegrind.out.*

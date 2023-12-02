@@ -15,6 +15,7 @@ mimalloc = { version = "*" }
 itertools = { version = "*" }
 num = { version = "*" }
 cached = { version = "*" }
+anyhow = { version = "1" }
 
 [profile.release]
 codegen-units = 1

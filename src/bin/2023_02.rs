@@ -1,4 +1,5 @@
 use advent_of_code_2023::{Cli, Parser};
+use anyhow::*;
 use std::fs;
 use std::str::FromStr;
 
@@ -9,22 +10,24 @@ struct SubGame {
 }
 
 impl FromStr for SubGame {
-    type Err = String;
+    type Err = Error;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+    fn from_str(s: &str) -> Result<Self> {
         let mut red = 0;
         let mut green = 0;
         let mut blue = 0;
 
         for item in s.split(", ") {
-            let (n, c) = item.split_once(' ').ok_or("item split failed")?;
-            let n: i64 = n.parse().or(Err("parse n failed"))?;
+            let (n, c) = item
+                .split_once(' ')
+                .ok_or(Error::msg("failed item split"))?;
+            let n: i64 = n.parse()?;
 
             match c {
                 "red" => red = n,
                 "green" => green = n,
                 "blue" => blue = n,
-                _ => return Err("invalid colour".into()),
+                _ => bail!("invalid colour"),
             }
         }
 
@@ -38,22 +41,21 @@ struct Game {
 }
 
 impl FromStr for Game {
-    type Err = String;
+    type Err = Error;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let (identifier, subgames) = s.split_once(": ").ok_or("game split failed")?;
+    fn from_str(s: &str) -> Result<Self> {
+        let (identifier, subgames) = s.split_once(": ").ok_or(Error::msg("game split failed"))?;
 
         let id: i64 = identifier
             .split_once(' ')
-            .ok_or("id split failed")?
+            .ok_or(Error::msg("id split failed"))?
             .1
-            .parse()
-            .or(Err("id parse failed"))?;
+            .parse()?;
 
         let subgames = subgames
             .split("; ")
             .map(|s| s.parse())
-            .collect::<Result<Vec<SubGame>, _>>()?;
+            .collect::<Result<Vec<SubGame>>>()?;
 
         Ok(Game { id, subgames })
     }

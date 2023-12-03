@@ -4,12 +4,13 @@ use std::fs;
 
 fn parse(raw_inp: &str) -> Array2<u8> {
     let columns = raw_inp
+        .trim()
         .bytes()
         .position(|c| c == b'\n')
         .expect("can't get column count");
 
     Array2::from_shape_vec(
-        (raw_inp.len() / (columns + 1), columns),
+        ((raw_inp.trim().len() + 1) / (columns + 1), columns),
         raw_inp.bytes().filter(|&x| x != b'\n').collect(),
     )
     .expect("can't make array")
@@ -74,7 +75,7 @@ fn calculate_p1(data: &Array2<u8>) -> u32 {
             let mut near = is_near_any_symbol(data, *y, *x);
             let mut x = *x;
 
-            while is_digit(data, *y, x + 1) {
+            while !near && is_digit(data, *y, x + 1) {
                 x += 1;
                 near |= is_near_any_symbol(data, *y, x);
             }
@@ -129,6 +130,35 @@ mod tests {
     const EXAMPLE_DATA: &str = include_str!("../../inputs/examples/2023_03");
     const REAL_DATA: &str = include_str!("../../inputs/real/2023_03");
 
+    const TEST_DATA_1: &str = "
+.......5......
+..7*..*.......
+...*13*.......
+.......15.....";
+
+    const TEST_DATA_2: &str = "
+12.......*..
++.........34
+.......-12..
+..78........
+..*....60...
+78.........9
+.5.....23..$
+8...90*12...
+............
+2.2......12.
+.*.........*
+1.1..503+.56";
+
+    const TEST_DATA_3: &str = "
+333.3
+...*.";
+
+    const TEST_DATA_4: &str = "
+....................
+..-52..52-..52..52..
+..................-.";
+
     #[test]
     fn test_p1_example() {
         assert_eq!(calculate_p1(&parse(EXAMPLE_DATA)), 4361);
@@ -137,6 +167,28 @@ mod tests {
     #[test]
     fn test_p2_example() {
         assert_eq!(calculate_p2(&parse(EXAMPLE_DATA)), 467835);
+    }
+
+    #[test]
+    fn test_test_data_1() {
+        assert_eq!(calculate_p2(&parse(TEST_DATA_1)), 442);
+    }
+
+    #[test]
+    fn test_test_data_2() {
+        assert_eq!(calculate_p1(&parse(TEST_DATA_2)), 925);
+        assert_eq!(calculate_p2(&parse(TEST_DATA_2)), 6756);
+    }
+
+    #[test]
+    fn test_test_data_3() {
+        assert_eq!(calculate_p1(&parse(TEST_DATA_3)), 336);
+        assert_eq!(calculate_p2(&parse(TEST_DATA_3)), 999);
+    }
+
+    #[test]
+    fn test_test_data_4() {
+        assert_eq!(calculate_p1(&parse(TEST_DATA_4)), 156);
     }
 
     #[test]

@@ -17,6 +17,7 @@ dependencies = [
  "modinverse",
  "ndarray",
  "num 0.4.1",
+ "num-integer",
  "rayon",
 ]
 

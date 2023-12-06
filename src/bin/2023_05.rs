@@ -121,13 +121,14 @@ fn best_seed_from_range(data: &Data, start: i64, range: i64) -> i64 {
                 if s < m.src {
                     increment = min(increment, m.src - s);
                 }
+            }
+            for m in mp.mapping.iter() {
                 if s >= m.src && s < m.src + m.range {
                     s = s + m.dest - m.src;
                     break;
                 }
             }
         }
-
         result = min(result, s);
         seed = seed.saturating_add(increment);
     }

@@ -1,28 +1,29 @@
 use advent_of_code_2023::{Cli, Parser};
 use anyhow::*;
-use std::fs;
 use num_integer::*;
+use std::fs;
 
 struct Race {
     time: i64,
     distance: i64,
 }
 
-fn parse_line_n(raw_inp: &str, n: usize) -> Vec<i64> {
+fn parse_line(raw_inp: &str) -> Vec<i64> {
     raw_inp
-        .lines()
-        .nth(n)
-        .expect("No line to parse?")
+        .trim()
         .split_ascii_whitespace()
-        .skip(1) // "Time:"
+        .skip(1) // "Time:" or "Distance:"
         .map(|x| x.parse())
         .collect::<Result<Vec<i64>, _>>()
         .expect("Couldn't parse line")
 }
 
 fn parse(raw_inp: &str) -> Vec<Race> {
-    let times = parse_line_n(raw_inp, 0);
-    let distances = parse_line_n(raw_inp, 1);
+    let (times, distances) = raw_inp
+        .trim()
+        .split_once('\n')
+        .map(|(t, d)| (parse_line(t), parse_line(d)))
+        .expect("not enough lines");
 
     times
         .iter()
@@ -34,14 +35,15 @@ fn parse(raw_inp: &str) -> Vec<Race> {
 fn ways_to_win(race: &Race) -> i64 {
     let win_dist = race.distance + 1;
     let discriminant = race.time * race.time - 4 * win_dist;
+    let root_discriminant = discriminant.sqrt();
 
-    let mut minimum_charge_time = (race.time - discriminant.sqrt()) / 2;
-    let mut maximum_charge_time = (race.time + discriminant.sqrt()) / 2;
-    
+    let mut minimum_charge_time = (race.time - root_discriminant) / 2;
+    let mut maximum_charge_time = (race.time + root_discriminant) / 2;
+
     if minimum_charge_time * (race.time - minimum_charge_time) < win_dist {
         minimum_charge_time += 1;
     }
-    
+
     if (maximum_charge_time + 1) * (race.time - (maximum_charge_time + 1)) >= win_dist {
         maximum_charge_time += 1;
     }
@@ -84,6 +86,54 @@ mod tests {
 
     const EXAMPLE_DATA: &str = include_str!("../../inputs/examples/2023_06");
     const REAL_DATA: &str = include_str!("../../inputs/real/2023_06");
+
+    #[test]
+    fn test_simple_winnable_races() {
+        // Wins if held for 1 or 2 or 3s
+        assert_eq!(
+            ways_to_win(&Race {
+                time: 4,
+                distance: 0
+            }),
+            3
+        );
+        assert_eq!(
+            ways_to_win(&Race {
+                time: 4,
+                distance: 1
+            }),
+            3
+        );
+        assert_eq!(
+            ways_to_win(&Race {
+                time: 4,
+                distance: 2
+            }),
+            3
+        );
+
+        // Only way to win should be to hold for 2s
+        assert_eq!(
+            ways_to_win(&Race {
+                time: 4,
+                distance: 3
+            }),
+            1
+        );
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_simple_unwinnable_race() {
+        // Can't win (can only equal the record) - should panic
+        assert_eq!(
+            ways_to_win(&Race {
+                time: 4,
+                distance: 4
+            }),
+            0
+        );
+    }
 
     #[test]
     fn test_p1_example() {

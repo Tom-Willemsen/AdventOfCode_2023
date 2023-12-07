@@ -1,98 +1,84 @@
 use advent_of_code_2023::{Cli, Parser};
-use ahash::AHashMap;
 use std::cmp::Ordering;
 use std::fs;
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Eq, PartialEq)]
 struct Hand {
-    cards: Vec<u8>,
     bid: u64,
+    strength_p1: HandType,
+    strength_p2: HandType,
+    cards: [u8; 5],
 }
 
-fn hand_strength<const PART: u8>(hand: &Hand) -> u8 {
-    let joker_count = if PART == 1 {
-        0
-    } else {
-        hand.cards.iter().filter(|&&c| c == b'J').count()
-    };
+#[repr(u8)]
+#[derive(Eq, PartialEq, Ord, PartialOrd, Copy, Clone)]
+enum HandType {
+    HighCard,
+    Pair,
+    TwoPair,
+    ThreeOfAKind,
+    FullHouse,
+    FourOfAKind,
+    FiveOfAKind,
+}
 
-    let mut card_counts = AHashMap::with_capacity(5);
+fn hand_strength<const PART: u8>(cards: &[u8]) -> HandType {
+    let mut card_counts = [0_usize; 14];
 
-    hand.cards
-        .iter()
-        .filter(|&&c| PART == 1 || c != b'J')
-        .for_each(|c| {
-            card_counts.entry(c).and_modify(|e| *e += 1).or_insert(1);
-        });
-
-    if joker_count >= 4 || card_counts.values().any(|&count| count >= 5 - joker_count) {
-        // Five-of-a-kind
-        return 6;
+    let mut joker_count = 0;
+    for card in cards {
+        if PART == 2 && card == &b'J' {
+            joker_count += 1;
+        } else {
+            let mapped = card_strength::<PART>(*card);
+            card_counts[mapped as usize] += 1;
+        }
     }
 
-    if joker_count >= 3 || card_counts.values().any(|&count| count >= 4 - joker_count) {
-        // Four-of-a-kind
-        return 5;
+    let (_, second_most_common, tail) = card_counts.select_nth_unstable(12);
+
+    // Always beneficial to add jokers to most common card type
+    let most_common = tail[0] + joker_count;
+
+    match (most_common, second_most_common) {
+        (5, _) => HandType::FiveOfAKind,
+        (4, _) => HandType::FourOfAKind,
+        (3, 2) => HandType::FullHouse,
+        (3, _) => HandType::ThreeOfAKind,
+        (2, 2) => HandType::TwoPair,
+        (2, _) => HandType::Pair,
+        _ => HandType::HighCard,
     }
-
-    let is_natural_full_house = card_counts.values().any(|&count| count == 3)
-        && card_counts.values().any(|&count| count == 2);
-
-    let has_two_natural_pairs = card_counts.values().filter(|&&count| count == 2).count() == 2;
-
-    let can_make_full_house = joker_count == 1 && has_two_natural_pairs;
-
-    if is_natural_full_house || can_make_full_house {
-        // Full house
-        return 4;
-    }
-
-    if joker_count >= 2 || card_counts.values().any(|&count| count >= 3 - joker_count) {
-        // Three-of-a-kind
-        return 3;
-    }
-
-    if has_two_natural_pairs {
-        // Two-pair
-        return 2;
-    }
-
-    if joker_count >= 1 || card_counts.values().any(|&count| count >= 2 - joker_count) {
-        // One-pair
-        return 1;
-    }
-
-    0
 }
 
 fn card_strength<const PART: u8>(card: u8) -> u8 {
     match card {
-        b'2' => 2,
-        b'3' => 3,
-        b'4' => 4,
-        b'5' => 5,
-        b'6' => 6,
-        b'7' => 7,
-        b'8' => 8,
-        b'9' => 9,
-        b'T' => 10,
+        b'T' => 9,
         b'J' => {
             if PART == 1 {
-                11
+                10
             } else {
-                1
+                0
             }
         }
-        b'Q' => 12,
-        b'K' => 13,
-        b'A' => 14,
-        _ => panic!("invalid card"),
+        b'Q' => 11,
+        b'K' => 12,
+        b'A' => 13,
+        card => card - b'1',
     }
 }
 
 fn compare_hands<const PART: u8>(hand1: &Hand, hand2: &Hand) -> Ordering {
-    let strength1 = hand_strength::<PART>(hand1);
-    let strength2 = hand_strength::<PART>(hand2);
+    let strength1 = if PART == 1 {
+        hand1.strength_p1
+    } else {
+        hand1.strength_p2
+    };
+    let strength2 = if PART == 1 {
+        hand2.strength_p1
+    } else {
+        hand2.strength_p2
+    };
 
     match strength1.cmp(&strength2) {
         Ordering::Equal => {
@@ -114,8 +100,12 @@ fn compare_hands<const PART: u8>(hand1: &Hand, hand2: &Hand) -> Ordering {
 fn parse_line(inp: &str) -> Hand {
     let (cards_str, bid_str) = inp.split_once(' ').expect("invalid format");
 
+    let cards: Vec<u8> = cards_str.bytes().collect();
+
     Hand {
-        cards: cards_str.bytes().collect(),
+        strength_p1: hand_strength::<1>(&cards),
+        strength_p2: hand_strength::<2>(&cards),
+        cards: cards.try_into().expect("invalid card length"),
         bid: bid_str.parse().expect("invalid bid"),
     }
 }
@@ -125,7 +115,7 @@ fn parse(raw_inp: &str) -> Vec<Hand> {
 }
 
 fn calculate<const PART: u8>(data: &mut [Hand]) -> u64 {
-    data.sort_by(compare_hands::<PART>);
+    data.sort_unstable_by(compare_hands::<PART>);
 
     data.iter().zip(1..).map(|(hand, idx)| idx * hand.bid).sum()
 }

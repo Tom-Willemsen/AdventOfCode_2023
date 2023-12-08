@@ -40,23 +40,18 @@ fn search(data: &Data, start: &str, cond: fn(&str) -> bool) -> u64 {
 
     let mut loc = start;
 
-    loop {
-        for dir in &data.directions {
-            result += 1;
+    for dir in data.directions.iter().cycle() {
+        result += 1;
 
-            let next = data.map.get(loc).expect("invalid location");
+        let next = data.map.get(loc).expect("invalid location");
 
-            if dir == &b'L' {
-                loc = next.0;
-            } else {
-                loc = next.1;
-            }
+        loc = if dir == &b'L' { next.0 } else { next.1 };
 
-            if cond(loc) {
-                return result;
-            }
+        if cond(loc) {
+            return result;
         }
     }
+    panic!("no directions");
 }
 
 fn calculate_p1(data: &Data) -> u64 {
@@ -69,14 +64,20 @@ fn calculate_p1(data: &Data) -> u64 {
 // These assumptions seem to be true for my input.
 fn calculate_p2(data: &Data) -> u64 {
     data.map
-        .par_iter()
-        .map(|itm| itm.0)
+        .keys()
         .filter(|k| k.ends_with('A'))
+        .par_bridge()
         .map(|k| search(data, k, |loc| loc.ends_with('Z')))
         .reduce(|| 1, |acc, elem| acc.lcm(&elem))
 }
 
 fn main() {
+    rayon::ThreadPoolBuilder::new()
+        .stack_size(64 * 1024) // 64k ought to be enough for anyone
+        .num_threads(8)
+        .build_global()
+        .unwrap();
+
     let args = Cli::parse();
 
     let inp = fs::read_to_string(args.input).expect("can't open input file");

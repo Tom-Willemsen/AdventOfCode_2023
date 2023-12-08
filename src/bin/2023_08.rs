@@ -1,6 +1,7 @@
 use advent_of_code_2023::{Cli, Parser};
 use ahash::AHashMap;
 use num::Integer;
+use rayon::prelude::*;
 use std::fs;
 
 struct Data<'a> {
@@ -62,13 +63,17 @@ fn calculate_p1(data: &Data) -> u64 {
     search(data, "AAA", |loc| loc == "ZZZ")
 }
 
+// Assumptions:
+// - Cycle length Z -> Z is same length as initial path A -> Z
+// - Cycle xxZ -> xxZ does not pass through *any* other node ending in Z
+// These assumptions seem to be true for my input.
 fn calculate_p2(data: &Data) -> u64 {
     data.map
-        .keys()
+        .par_iter()
+        .map(|itm| itm.0)
         .filter(|k| k.ends_with('A'))
         .map(|k| search(data, k, |loc| loc.ends_with('Z')))
-        .reduce(|acc, elem| acc.lcm(&elem))
-        .expect("Expected at least one loc ending in A")
+        .reduce(|| 1, |acc, elem| acc.lcm(&elem))
 }
 
 fn main() {
@@ -77,8 +82,7 @@ fn main() {
     let inp = fs::read_to_string(args.input).expect("can't open input file");
 
     let data = parse(&inp);
-    let p1 = calculate_p1(&data);
-    let p2 = calculate_p2(&data);
+    let (p1, p2) = rayon::join(|| calculate_p1(&data), || calculate_p2(&data));
     println!("{}\n{}", p1, p2);
 }
 

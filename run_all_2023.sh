@@ -11,7 +11,7 @@ do
         $CMD
         echo ""
         # Main benchmarking
-        hyperfine $HYPERFINE_RUN_ARGS -N -u millisecond --style basic "$CMD" 2>/dev/null
+        hyperfine $HYPERFINE_RUN_ARGS -u millisecond --style basic "$CMD" 2>/dev/null
         
         # CPU energy usage benchmark
         CPU_JOULES_ITER=20

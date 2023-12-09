@@ -7,27 +7,24 @@ use std::fs;
 
 struct Data<'a> {
     directions: Vec<u8>,
-    map: AHashMap<&'a str, (&'a str, &'a str)>,
+    map: AHashMap<&'a [u8; 3], (&'a [u8; 3], &'a [u8; 3])>,
 }
 
-fn parse(raw_inp: &str) -> Data {
+fn parse(raw_inp: &[u8]) -> Data {
     let directions = raw_inp
-        .trim()
-        .lines()
+        .split(|&elem| elem == b'\n')
         .next()
-        .map(|line| line.trim().bytes().collect::<Vec<_>>())
+        .map(|line| line.into())
         .expect("can't parse directions");
 
     let map = raw_inp
-        .trim()
-        .lines()
+        .split(|&elem| elem == b'\n')
         .skip(2) // Directions + blank line
+        .filter(|line| !line.is_empty())
         .map(|line| {
-            let (src, rest) = line.split_once(" = ").expect("failed dir split");
-
-            let (left, right) = rest.split_once(", ").expect("failed l/r split");
-            let left = left.strip_prefix('(').expect("bad line format?");
-            let right = right.strip_suffix(')').expect("bad line format?");
+            let src = line[0..3].try_into().unwrap();
+            let left = line[7..10].try_into().unwrap();
+            let right = line[12..15].try_into().unwrap();
 
             (src, (left, right))
         })
@@ -36,7 +33,7 @@ fn parse(raw_inp: &str) -> Data {
     Data { directions, map }
 }
 
-fn search(data: &Data, start: &str, cond: fn(&str) -> bool) -> u64 {
+fn search(data: &Data, start: &[u8; 3], cond: fn(&[u8; 3]) -> bool) -> u64 {
     let mut result = 0;
 
     let mut loc = start;
@@ -56,7 +53,7 @@ fn search(data: &Data, start: &str, cond: fn(&str) -> bool) -> u64 {
 }
 
 fn calculate_p1(data: &Data) -> u64 {
-    search(data, "AAA", |loc| loc == "ZZZ")
+    search(data, b"AAA", |loc| loc == b"ZZZ")
 }
 
 // Assumptions:
@@ -66,9 +63,9 @@ fn calculate_p1(data: &Data) -> u64 {
 fn calculate_p2(data: &Data) -> u64 {
     data.map
         .keys()
-        .filter(|k| k.ends_with('A'))
+        .filter(|k| k[2] == b'Z')
         .par_bridge()
-        .map(|k| search(data, k, |loc| loc.ends_with('Z')))
+        .map(|k| search(data, k, |loc| loc[2] == b'Z'))
         .reduce(|| 1, |acc, elem| acc.lcm(&elem))
 }
 
@@ -81,7 +78,7 @@ fn main() {
 
     let args = Cli::parse();
 
-    let inp = fs::read_to_string(args.input).expect("can't open input file");
+    let inp = fs::read(args.input).expect("can't open input file");
 
     let data = parse(&inp);
     let (p1, p2) = rayon::join(|| calculate_p1(&data), || calculate_p2(&data));
@@ -92,10 +89,10 @@ fn main() {
 mod tests {
     use super::*;
 
-    const EXAMPLE_DATA_P1_1: &str = include_str!("../../inputs/examples/2023_08_p1_ex1");
-    const EXAMPLE_DATA_P1_2: &str = include_str!("../../inputs/examples/2023_08_p1_ex2");
-    const EXAMPLE_DATA_P2: &str = include_str!("../../inputs/examples/2023_08_p2");
-    const REAL_DATA: &str = include_str!("../../inputs/real/2023_08");
+    const EXAMPLE_DATA_P1_1: &[u8] = include_bytes!("../../inputs/examples/2023_08_p1_ex1");
+    const EXAMPLE_DATA_P1_2: &[u8] = include_bytes!("../../inputs/examples/2023_08_p1_ex2");
+    const EXAMPLE_DATA_P2: &[u8] = include_bytes!("../../inputs/examples/2023_08_p2");
+    const REAL_DATA: &[u8] = include_bytes!("../../inputs/real/2023_08");
 
     #[test]
     fn test_p1_example_1() {

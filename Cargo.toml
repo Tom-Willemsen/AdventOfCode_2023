@@ -17,6 +17,7 @@ num = { version = "*" }
 num-integer = { version = "*" }
 cached = { version = "*" }
 anyhow = { version = "1" }
+smallvec = { version = "1" }
 
 [features]
 bench = []

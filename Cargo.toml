@@ -18,6 +18,9 @@ num-integer = { version = "*" }
 cached = { version = "*" }
 anyhow = { version = "1" }
 
+[features]
+bench = []
+
 [profile.release]
 codegen-units = 1
 lto = "fat"

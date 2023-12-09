@@ -1,3 +1,4 @@
+#![cfg_attr(feature = "bench", feature(test))]
 use advent_of_code_2023::{Cli, Parser};
 use std::fs;
 
@@ -91,5 +92,23 @@ mod tests {
     #[test]
     fn test_p2_real() {
         assert_eq!(calculate::<2>(&REAL_DATA), 56017);
+    }
+
+    #[cfg(feature = "bench")]
+    mod benches {
+        extern crate test;
+        use test::{black_box, Bencher};
+
+        use super::*;
+
+        #[bench]
+        fn bench_p1(b: &mut Bencher) {
+            b.iter(|| calculate::<1>(black_box(REAL_DATA)));
+        }
+
+        #[bench]
+        fn bench_p2(b: &mut Bencher) {
+            b.iter(|| calculate::<2>(black_box(REAL_DATA)));
+        }
     }
 }

@@ -81,32 +81,31 @@ fn parse(raw_inp: &str) -> Data {
     }
 }
 
-fn calculate<const SIZE_MULTIPLIER: usize>(data: &Data) -> usize {
+fn calculate<const P1_MUL: usize, const P2_MUL: usize>(data: &Data) -> (usize, usize) {
     data.galaxies
         .iter()
-        .combinations(2)
-        .map(|v| {
-            let g1 = v[0];
-            let g2 = v[1];
+        .tuple_combinations()
+        .map(|(g1, g2)| {
             let raw_dist = g1.diff(g2);
 
             let extra_rows = data
                 .extra_rows
                 .iter()
                 .filter(|&&e| e > g1.y.min(g2.y) && e < g1.y.max(g2.y))
-                .count()
-                * (SIZE_MULTIPLIER - 1);
+                .count();
 
             let extra_cols = data
                 .extra_cols
                 .iter()
                 .filter(|&&e| e > g1.x.min(g2.x) && e < g1.x.max(g2.x))
-                .count()
-                * (SIZE_MULTIPLIER - 1);
+                .count();
 
-            raw_dist + extra_rows + extra_cols
+            (
+                raw_dist + (extra_rows + extra_cols) * (P1_MUL - 1),
+                raw_dist + (extra_rows + extra_cols) * (P2_MUL - 1),
+            )
         })
-        .sum()
+        .fold((0, 0), |acc, elem| (acc.0 + elem.0, acc.1 + elem.1))
 }
 
 fn main() {
@@ -115,8 +114,7 @@ fn main() {
     let inp = fs::read_to_string(args.input).expect("can't open input file");
 
     let data = parse(&inp);
-    let p1 = calculate::<2>(&data);
-    let p2 = calculate::<1000000>(&data);
+    let (p1, p2) = calculate::<2, 1000000>(&data);
     println!("{}\n{}", p1, p2);
 }
 
@@ -129,23 +127,22 @@ mod tests {
 
     #[test]
     fn test_p1_example() {
-        assert_eq!(calculate::<2>(&parse(EXAMPLE_DATA)), 374);
+        assert_eq!(calculate::<2, 2>(&parse(EXAMPLE_DATA)).0, 374);
     }
 
     #[test]
     fn test_p2_examples() {
-        assert_eq!(calculate::<10>(&parse(EXAMPLE_DATA)), 1030);
-        assert_eq!(calculate::<100>(&parse(EXAMPLE_DATA)), 8410);
+        assert_eq!(calculate::<10, 100>(&parse(EXAMPLE_DATA)), (1030, 8410));
     }
 
     #[test]
     fn test_p1_real() {
-        assert_eq!(calculate::<2>(&parse(REAL_DATA)), 10490062);
+        assert_eq!(calculate::<2, 1000000>(&parse(REAL_DATA)).0, 10490062);
     }
 
     #[test]
     fn test_p2_real() {
-        assert_eq!(calculate::<1000000>(&parse(REAL_DATA)), 382979724122);
+        assert_eq!(calculate::<2, 1000000>(&parse(REAL_DATA)).1, 382979724122);
     }
 
     #[cfg(feature = "bench")]
@@ -157,7 +154,7 @@ mod tests {
 
         #[bench]
         fn bench(b: &mut Bencher) {
-            b.iter(|| calculate::<1000000>(&parse(black_box(REAL_DATA))));
+            b.iter(|| calculate::<2, 1000000>(&parse(black_box(REAL_DATA))));
         }
     }
 }

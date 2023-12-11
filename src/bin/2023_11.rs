@@ -10,16 +10,12 @@ struct Point {
     pub y: usize,
 }
 
-impl Point {
-    fn diff(&self, other: &Point) -> usize {
-        self.x.abs_diff(other.x) + self.y.abs_diff(other.y)
-    }
-}
-
 struct Data {
     galaxies: Vec<Point>,
     extra_cols: Vec<usize>,
     extra_rows: Vec<usize>,
+    rows: usize,
+    cols: usize,
 }
 
 fn make_grid(raw_inp: &str) -> Array2<bool> {
@@ -41,69 +37,69 @@ fn make_grid(raw_inp: &str) -> Array2<bool> {
 }
 
 fn parse(raw_inp: &str) -> Data {
-    let mut galaxies = vec![];
-    let mut extra_rows = vec![];
-    let mut extra_cols = vec![];
-
     let grid = make_grid(raw_inp);
 
-    for y in 0..grid.dim().0 {
-        let mut contains_any_galaxy = false;
-        for x in 0..grid.dim().1 {
-            if grid[(y, x)] {
-                contains_any_galaxy = true;
-                galaxies.push(Point { y, x });
-            }
-        }
+    let galaxies = grid
+        .indexed_iter()
+        .filter(|(_, &v)| v)
+        .map(|(idx, _)| Point { y: idx.0, x: idx.1 })
+        .collect::<Vec<_>>();
 
-        if !contains_any_galaxy {
-            extra_rows.push(y);
-        }
-    }
+    let extra_rows = (0..grid.dim().0)
+        .filter(|&y| galaxies.iter().all(|g| g.y != y))
+        .collect::<Vec<_>>();
 
-    for x in 0..grid.dim().1 {
-        let mut contains_any_galaxy = false;
-        for y in 0..grid.dim().0 {
-            if grid[(y, x)] {
-                contains_any_galaxy = true;
-                break;
-            }
-        }
-        if !contains_any_galaxy {
-            extra_cols.push(x);
-        }
-    }
+    let extra_cols = (0..grid.dim().1)
+        .filter(|&x| galaxies.iter().all(|g| g.x != x))
+        .collect::<Vec<_>>();
 
     Data {
         galaxies,
         extra_cols,
         extra_rows,
+        rows: grid.dim().0,
+        cols: grid.dim().1,
     }
 }
 
+fn make_cumulative_sum<const P1_MUL: usize, const P2_MUL: usize, F>(
+    n: usize,
+    add_many_rows: F,
+) -> (Vec<usize>, Vec<usize>)
+where
+    F: Fn(usize) -> bool,
+{
+    let mut csum_p1 = vec![];
+    let mut csum_p2 = vec![];
+
+    for i in 0..n {
+        let add_many = add_many_rows(i);
+        csum_p1.push(csum_p1.last().unwrap_or(&0) + if add_many { P1_MUL } else { 1 });
+        csum_p2.push(csum_p2.last().unwrap_or(&0) + if add_many { P2_MUL } else { 1 });
+    }
+
+    (csum_p1, csum_p2)
+}
+
 fn calculate<const P1_MUL: usize, const P2_MUL: usize>(data: &Data) -> (usize, usize) {
+    let (p1_rows_csum, p2_rows_csum) = make_cumulative_sum::<P1_MUL, P2_MUL, _>(data.rows, |y| {
+        data.extra_rows.iter().any(|&ey| ey == y)
+    });
+    let (p1_cols_csum, p2_cols_csum) = make_cumulative_sum::<P1_MUL, P2_MUL, _>(data.cols, |x| {
+        data.extra_cols.iter().any(|&ex| ex == x)
+    });
+
     data.galaxies
         .iter()
         .tuple_combinations()
         .map(|(g1, g2)| {
-            let raw_dist = g1.diff(g2);
+            let p1_rows_cost = p1_rows_csum[g1.y.max(g2.y)] - p1_rows_csum[g1.y.min(g2.y)];
+            let p1_cols_cost = p1_cols_csum[g1.x.max(g2.x)] - p1_cols_csum[g1.x.min(g2.x)];
 
-            let extra_rows = data
-                .extra_rows
-                .iter()
-                .filter(|&&e| e > g1.y.min(g2.y) && e < g1.y.max(g2.y))
-                .count();
+            let p2_rows_cost = p2_rows_csum[g1.y.max(g2.y)] - p2_rows_csum[g1.y.min(g2.y)];
+            let p2_cols_cost = p2_cols_csum[g1.x.max(g2.x)] - p2_cols_csum[g1.x.min(g2.x)];
 
-            let extra_cols = data
-                .extra_cols
-                .iter()
-                .filter(|&&e| e > g1.x.min(g2.x) && e < g1.x.max(g2.x))
-                .count();
-
-            (
-                raw_dist + (extra_rows + extra_cols) * (P1_MUL - 1),
-                raw_dist + (extra_rows + extra_cols) * (P2_MUL - 1),
-            )
+            ((p1_rows_cost + p1_cols_cost), (p2_rows_cost + p2_cols_cost))
         })
         .fold((0, 0), |acc, elem| (acc.0 + elem.0, acc.1 + elem.1))
 }

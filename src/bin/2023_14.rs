@@ -29,35 +29,53 @@ const WEST: u8 = 3;
 
 fn next_location<const DIR: u8>(idx: &(usize, usize)) -> (usize, usize) {
     match DIR {
-        NORTH => (idx.0 - 1, idx.1),
-        WEST => (idx.0, idx.1 - 1),
+        NORTH => (idx.0.wrapping_sub(1), idx.1),
+        WEST => (idx.0, idx.1.wrapping_sub(1)),
         SOUTH => (idx.0 + 1, idx.1),
         EAST => (idx.0, idx.1 + 1),
         _ => panic!("invalid direction"),
     }
 }
 
-fn roll<const DIR: u8>(data: &mut Array2<u8>) -> bool {
-    let rocks_to_move = data
+fn prev_location<const DIR: u8>(idx: &(usize, usize)) -> (usize, usize) {
+    match DIR {
+        NORTH => (idx.0 + 1, idx.1),
+        WEST => (idx.0, idx.1 + 1),
+        SOUTH => (idx.0.wrapping_sub(1), idx.1),
+        EAST => (idx.0, idx.1.wrapping_sub(1)),
+        _ => panic!("invalid direction"),
+    }
+}
+
+fn roll<const DIR: u8>(data: &mut Array2<u8>) {
+    let mut rocks = data
         .indexed_iter()
-        .filter(|(idx, _)| match DIR {
-            NORTH => idx.0 != 0,
-            WEST => idx.1 != 0,
-            SOUTH => idx.0 != data.dim().0 - 1,
-            EAST => idx.1 != data.dim().1 - 1,
-            _ => panic!("invalid direction"),
-        })
         .filter(|(_, &itm)| itm == b'O')
-        .filter(|(idx, _)| data[next_location::<DIR>(idx)] == b'.')
         .map(|(idx, _)| idx)
         .collect::<Vec<_>>();
-
-    rocks_to_move.iter().for_each(|idx| {
-        data[next_location::<DIR>(idx)] = b'O';
-        data[(idx.0, idx.1)] = b'.';
-    });
-
-    !rocks_to_move.is_empty()
+    
+    while let Some(rock_idx) = rocks.pop() {
+        
+        if data.get(rock_idx) != Some(&b'O') {
+            continue;
+        }
+        
+        let next_idx = next_location::<DIR>(&rock_idx);
+        
+        if data.get(next_idx) == Some(&b'.') {
+            data[next_idx] = b'O';
+            data[rock_idx] = b'.';
+            
+            rocks.push(next_idx);
+            
+            // If we just made space for a different rock to move, 
+            // add that one to the queue.
+            let prev_idx = prev_location::<DIR>(&rock_idx);
+            if data.get(prev_idx) == Some(&b'O') {
+                rocks.push(prev_idx);
+            }
+        }
+    }
 }
 
 fn calculate_total_load(data: &Array2<u8>) -> usize {
@@ -70,16 +88,16 @@ fn calculate_total_load(data: &Array2<u8>) -> usize {
 fn calculate_p1(orig_data: &Array2<u8>) -> usize {
     let mut data = orig_data.clone();
 
-    while roll::<NORTH>(&mut data) {}
+    roll::<NORTH>(&mut data);
 
     calculate_total_load(&data)
 }
 
 fn apply_one_cycle(data: &mut Array2<u8>) {
-    while roll::<NORTH>(data) {}
-    while roll::<WEST>(data) {}
-    while roll::<SOUTH>(data) {}
-    while roll::<EAST>(data) {}
+    roll::<NORTH>(data);
+    roll::<WEST>(data);
+    roll::<SOUTH>(data);
+    roll::<EAST>(data);
 }
 
 // Tried hare-and-tortoise algorithm but that's slower

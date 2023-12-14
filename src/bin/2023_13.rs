@@ -32,12 +32,14 @@ fn get_y_reflection<const WANTED_DIFF: usize>(arr: &Array2<bool>) -> Option<usiz
                 .rev()
                 .zip(start_y + 1..arr.dim().0)
                 .map(|(r1, r2)| {
-                    arr.slice(s![r1, ..]).iter()
+                    arr.slice(s![r1, ..])
+                        .iter()
                         .zip(arr.slice(s![r2, ..]))
                         .map(|(e1, e2)| if e1 != e2 { 1 } else { 0 })
                         .sum::<usize>()
                 })
-                .sum::<usize>() == WANTED_DIFF
+                .sum::<usize>()
+                == WANTED_DIFF
         })
         .map(|start_y| start_y + 1)
         .next()
@@ -50,13 +52,14 @@ fn get_x_reflection<const WANTED_DIFF: usize>(arr: &Array2<bool>) -> Option<usiz
                 .rev()
                 .zip(start_x + 1..arr.dim().1)
                 .map(|(c1, c2)| {
-                    arr.slice(s![.., c1]).iter()
+                    arr.slice(s![.., c1])
+                        .iter()
                         .zip(arr.slice(s![.., c2]))
                         .map(|(e1, e2)| if e1 != e2 { 1 } else { 0 })
                         .sum::<usize>()
-                    
                 })
-                .sum::<usize>() == WANTED_DIFF
+                .sum::<usize>()
+                == WANTED_DIFF
         })
         .map(|start_x| start_x + 1)
         .next()
@@ -124,8 +127,10 @@ mod tests {
         #[bench]
         fn bench(b: &mut Bencher) {
             b.iter(|| {
-                let mut data = parse(black_box(REAL_DATA));
-                calculate(&mut data);
+                let data = parse(black_box(REAL_DATA));
+                let p1 = calculate::<0>(&data);
+                let p2 = calculate::<1>(&data);
+                (p1, p2)
             });
         }
     }

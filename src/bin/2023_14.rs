@@ -34,6 +34,7 @@ fn prev_location<const DIR: u8>(idx: &(usize, usize)) -> (usize, usize) {
     }
 }
 
+#[inline(never)]
 fn roll<const DIR: u8>(data: &mut Array2<u8>) {
     let mut rocks = data
         .indexed_iter()
@@ -88,38 +89,33 @@ fn apply_one_cycle(data: &mut Array2<u8>) {
 
 // Tried hare-and-tortoise algorithm but that's slower
 // as the cycle just isn't very long and f() is expensive.
-// So just use a map of previous states instead.
-//
-// Note: data mutated in-place and will be at position:
-//      head + cycle_length
-// after this function returns.
-fn find_cycle(data: &mut Array2<u8>) -> (usize, usize) {
+// So just use a map of all previous states instead (!).
+fn calculate_p2(mut data: Array2<u8>) -> usize {
     let mut map: AHashMap<Array2<u8>, usize> = AHashMap::with_capacity(128);
 
     let mut curr = 0;
 
-    loop {
+    let (head, cycle_length) = loop {
         curr += 1;
-        apply_one_cycle(data);
+        apply_one_cycle(&mut data);
 
         if let Some(&previous) = map.get(&data) {
-            return (previous, curr - previous);
+            break (previous, curr - previous);
         } else {
             map.insert(data.clone(), curr);
         }
-    }
-}
-
-fn calculate_p2(mut data: Array2<u8>) -> usize {
-    let (head, cycle_length) = find_cycle(&mut data);
+    };
 
     let tail = (1000000000 - head) % cycle_length;
 
-    for _ in 0..tail {
-        apply_one_cycle(&mut data);
-    }
+    let final_grid = map
+        .iter()
+        .filter(|(_, &v)| v == head + tail)
+        .map(|(k, _)| k)
+        .next()
+        .expect("no valid answer?");
 
-    calculate_total_load(&data)
+    calculate_total_load(final_grid)
 }
 
 fn main() {

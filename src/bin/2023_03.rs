@@ -1,20 +1,11 @@
 #![cfg_attr(feature = "bench", feature(test))]
+use advent_of_code_2023::grid_util::make_byte_grid;
 use advent_of_code_2023::{Cli, Parser};
 use ndarray::Array2;
 use std::fs;
 
 fn parse(raw_inp: &str) -> Array2<u8> {
-    let columns = raw_inp
-        .trim()
-        .bytes()
-        .position(|c| c == b'\n')
-        .expect("can't get column count");
-
-    Array2::from_shape_vec(
-        ((raw_inp.trim().len() + 1) / (columns + 1), columns),
-        raw_inp.bytes().filter(|&x| x != b'\n').collect(),
-    )
-    .expect("can't make array")
+    make_byte_grid(raw_inp)
 }
 
 const SYMBOLS: [u8; 10] = [b'#', b'$', b'%', b'&', b'*', b'+', b'-', b'/', b'=', b'@'];

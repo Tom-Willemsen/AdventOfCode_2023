@@ -1,7 +1,7 @@
 #![cfg_attr(feature = "bench", feature(test))]
+use advent_of_code_2023::grid_util::make_bool_grid;
 use advent_of_code_2023::{Cli, Parser};
 use itertools::Itertools;
-use ndarray::Array2;
 use std::fs;
 
 #[derive(Eq, PartialEq)]
@@ -18,26 +18,8 @@ struct Data {
     cols: usize,
 }
 
-fn make_grid(raw_inp: &str) -> Array2<bool> {
-    let columns = raw_inp
-        .trim()
-        .bytes()
-        .position(|c| c == b'\n')
-        .expect("can't get column count");
-
-    Array2::from_shape_vec(
-        ((raw_inp.trim().len() + 1) / (columns + 1), columns),
-        raw_inp
-            .bytes()
-            .filter(|&x| x != b'\n')
-            .map(|b| b == b'#')
-            .collect(),
-    )
-    .expect("can't make array")
-}
-
 fn parse(raw_inp: &str) -> Data {
-    let grid = make_grid(raw_inp);
+    let grid = make_bool_grid::<b'#'>(raw_inp);
 
     let galaxies = grid
         .indexed_iter()

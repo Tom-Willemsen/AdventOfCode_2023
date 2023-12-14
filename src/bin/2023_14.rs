@@ -1,25 +1,12 @@
 #![cfg_attr(feature = "bench", feature(test))]
+use advent_of_code_2023::grid_util::make_byte_grid;
 use advent_of_code_2023::{Cli, Parser};
+use ahash::AHashMap;
 use ndarray::Array2;
 use std::fs;
-use ahash::AHashMap;
-
-fn make_grid(raw_inp: &str) -> Array2<u8> {
-    let columns = raw_inp
-        .trim()
-        .bytes()
-        .position(|c| c == b'\n')
-        .expect("can't get column count");
-
-    Array2::from_shape_vec(
-        ((raw_inp.trim().len() + 1) / (columns + 1), columns),
-        raw_inp.bytes().filter(|&x| x != b'\n').collect(),
-    )
-    .expect("can't make array")
-}
 
 fn parse(raw_inp: &str) -> Array2<u8> {
-    make_grid(raw_inp.trim())
+    make_byte_grid(raw_inp.trim())
 }
 
 const NORTH: u8 = 0;
@@ -53,22 +40,21 @@ fn roll<const DIR: u8>(data: &mut Array2<u8>) {
         .filter(|(_, &itm)| itm == b'O')
         .map(|(idx, _)| idx)
         .collect::<Vec<_>>();
-    
+
     while let Some(rock_idx) = rocks.pop() {
-        
         if data.get(rock_idx) != Some(&b'O') {
             continue;
         }
-        
+
         let next_idx = next_location::<DIR>(&rock_idx);
-        
+
         if data.get(next_idx) == Some(&b'.') {
             data[next_idx] = b'O';
             data[rock_idx] = b'.';
-            
+
             rocks.push(next_idx);
-            
-            // If we just made space for a different rock to move, 
+
+            // If we just made space for a different rock to move,
             // add that one to the queue.
             let prev_idx = prev_location::<DIR>(&rock_idx);
             if data.get(prev_idx) == Some(&b'O') {
@@ -108,9 +94,8 @@ fn apply_one_cycle(data: &mut Array2<u8>) {
 //      head + cycle_length
 // after this function returns.
 fn find_cycle(data: &mut Array2<u8>) -> (usize, usize) {
-    
     let mut map: AHashMap<Array2<u8>, usize> = AHashMap::with_capacity(128);
-    
+
     let mut curr = 0;
 
     loop {
@@ -179,9 +164,9 @@ mod tests {
     mod benches {
         extern crate test;
         use test::{black_box, Bencher};
-    
+
         use super::*;
-    
+
         #[bench]
         fn bench(b: &mut Bencher) {
             b.iter(|| {

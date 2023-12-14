@@ -1,28 +1,15 @@
 #![cfg_attr(feature = "bench", feature(test))]
+use advent_of_code_2023::grid_util::make_bool_grid;
 use advent_of_code_2023::{Cli, Parser};
 use ndarray::{s, Array2};
 use std::fs;
 
-fn make_grid(raw_inp: &str) -> Array2<bool> {
-    let columns = raw_inp
-        .trim()
-        .bytes()
-        .position(|c| c == b'\n')
-        .expect("can't get column count");
-
-    Array2::from_shape_vec(
-        ((raw_inp.trim().len() + 1) / (columns + 1), columns),
-        raw_inp
-            .bytes()
-            .filter(|&x| x != b'\n')
-            .map(|b| b == b'#')
-            .collect(),
-    )
-    .expect("can't make array")
-}
-
 fn parse(raw_inp: &str) -> Vec<Array2<bool>> {
-    raw_inp.trim().split("\n\n").map(make_grid).collect()
+    raw_inp
+        .trim()
+        .split("\n\n")
+        .map(make_bool_grid::<b'#'>)
+        .collect()
 }
 
 fn get_y_reflection<const WANTED_DIFF: usize>(arr: &Array2<bool>) -> Option<usize> {

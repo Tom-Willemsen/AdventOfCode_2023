@@ -15,46 +15,7 @@ fn calculate_p1(data: &[&str]) -> usize {
     data.iter().map(|s| hash(s)).sum()
 }
 
-fn calculate_p2(data: &[&str]) -> usize {
-    const EMPTY_VEC: Vec<(&str, usize)> = vec![];
-    let mut library: [Vec<(&str, usize)>; 256] = [EMPTY_VEC; 256];
-
-    data.iter().for_each(|s| {
-        if let Some((head, tail)) = s.split_once('=') {
-            let bx = hash(head);
-            let n: usize = tail.parse().unwrap();
-            let mut new = true;
-
-            let mut new_lenses = library[bx]
-                .iter()
-                .map(|(label, old_n)| {
-                    if &head == label {
-                        new = false;
-                        (*label, n)
-                    } else {
-                        (*label, *old_n)
-                    }
-                })
-                .collect::<Vec<_>>();
-
-            if new {
-                new_lenses.push((head, n));
-            }
-
-            library[bx] = new_lenses;
-        } else if let Some((head, _)) = s.split_once('-') {
-            let bx = hash(head);
-
-            let new_lenses = library[bx]
-                .iter()
-                .filter(|(label, _)| label != &head)
-                .cloned()
-                .collect::<Vec<_>>();
-
-            library[bx] = new_lenses;
-        }
-    });
-
+fn calculate_p2_score(library: &[Vec<(&str, usize)>; 256]) -> usize {
     library
         .iter()
         .enumerate()
@@ -65,6 +26,35 @@ fn calculate_p2(data: &[&str]) -> usize {
                 .sum::<usize>()
         })
         .sum()
+}
+
+fn calculate_p2(data: &[&str]) -> usize {
+    const EMPTY_VEC: Vec<(&str, usize)> = vec![];
+    let mut library: [Vec<(&str, usize)>; 256] = [EMPTY_VEC; 256];
+
+    data.iter().for_each(|s| {
+        if let Some((key, value)) = s.split_once('=') {
+            let bx = hash(key);
+            let new_value: usize = value.parse().unwrap();
+            let mut is_new = true;
+
+            for (label, val) in &mut library[bx] {
+                if &key == label {
+                    is_new = false;
+                    *val = new_value;
+                    break;
+                }
+            }
+
+            if is_new {
+                library[bx].push((key, new_value));
+            }
+        } else if let Some((key, _)) = s.split_once('-') {
+            library[hash(key)].retain(|elem| elem.0 != key);
+        }
+    });
+
+    calculate_p2_score(&library)
 }
 
 fn main() {

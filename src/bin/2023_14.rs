@@ -117,6 +117,11 @@ fn calculate_p2(mut data: Array2<u8>) -> usize {
 }
 
 fn main() {
+    rayon::ThreadPoolBuilder::new()
+        .num_threads(8)
+        .build_global()
+        .unwrap();
+
     let args = Cli::parse();
 
     let inp = fs::read_to_string(args.input).expect("can't open input file");

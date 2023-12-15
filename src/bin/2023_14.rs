@@ -3,6 +3,7 @@ use advent_of_code_2023::grid_util::make_byte_grid;
 use advent_of_code_2023::{Cli, Parser};
 use ahash::AHashMap;
 use ndarray::Array2;
+use rayon::prelude::*;
 use std::fs;
 
 fn parse(raw_inp: &str) -> Array2<u8> {
@@ -14,55 +15,52 @@ const EAST: u8 = 1;
 const SOUTH: u8 = 2;
 const WEST: u8 = 3;
 
-fn next_location<const DIR: u8>(idx: &(usize, usize)) -> (usize, usize) {
-    match DIR {
-        NORTH => (idx.0.wrapping_sub(1), idx.1),
-        WEST => (idx.0, idx.1.wrapping_sub(1)),
-        SOUTH => (idx.0 + 1, idx.1),
-        EAST => (idx.0, idx.1 + 1),
-        _ => panic!("invalid direction"),
-    }
-}
-
-fn prev_location<const DIR: u8>(idx: &(usize, usize)) -> (usize, usize) {
-    match DIR {
-        NORTH => (idx.0 + 1, idx.1),
-        WEST => (idx.0, idx.1 + 1),
-        SOUTH => (idx.0.wrapping_sub(1), idx.1),
-        EAST => (idx.0, idx.1.wrapping_sub(1)),
-        _ => panic!("invalid direction"),
-    }
-}
-
 #[inline(never)]
 fn roll<const DIR: u8>(data: &mut Array2<u8>) {
-    let mut rocks = data
-        .indexed_iter()
-        .filter(|(_, &itm)| itm == b'O')
-        .map(|(idx, _)| idx)
-        .collect::<Vec<_>>();
+    match DIR {
+        NORTH => data.columns_mut(),
+        SOUTH => data.columns_mut(),
+        WEST => data.rows_mut(),
+        EAST => data.rows_mut(),
+        _ => panic!("invalid dir"),
+    }
+    .into_iter()
+    .par_bridge()
+    .for_each(|mut slice| {
+        let mut rocks = slice
+            .iter()
+            .enumerate()
+            .filter(|(_, &itm)| itm == b'O')
+            .map(|(idx, _)| idx)
+            .collect::<Vec<_>>();
 
-    while let Some(rock_idx) = rocks.pop() {
-        if data.get(rock_idx) != Some(&b'O') {
-            continue;
-        }
+        while let Some(rock_idx) = rocks.pop() {
+            if slice.get(rock_idx) != Some(&b'O') {
+                continue;
+            }
 
-        let next_idx = next_location::<DIR>(&rock_idx);
+            let (prev_idx, next_idx) = match DIR {
+                SOUTH => (rock_idx.wrapping_sub(1), rock_idx.wrapping_add(1)),
+                EAST => (rock_idx.wrapping_sub(1), rock_idx.wrapping_add(1)),
+                NORTH => (rock_idx.wrapping_add(1), rock_idx.wrapping_sub(1)),
+                WEST => (rock_idx.wrapping_add(1), rock_idx.wrapping_sub(1)),
+                _ => panic!("invalid dir"),
+            };
 
-        if data.get(next_idx) == Some(&b'.') {
-            data[next_idx] = b'O';
-            data[rock_idx] = b'.';
+            if slice.get(next_idx) == Some(&b'.') {
+                slice[next_idx] = b'O';
+                slice[rock_idx] = b'.';
 
-            rocks.push(next_idx);
+                rocks.push(next_idx);
 
-            // If we just made space for a different rock to move,
-            // add that one to the queue.
-            let prev_idx = prev_location::<DIR>(&rock_idx);
-            if data.get(prev_idx) == Some(&b'O') {
-                rocks.push(prev_idx);
+                // If we just made space for a different rock to move,
+                // add that one to the queue.
+                if slice.get(prev_idx) == Some(&b'O') {
+                    rocks.push(prev_idx);
+                }
             }
         }
-    }
+    });
 }
 
 fn calculate_total_load(data: &Array2<u8>) -> usize {

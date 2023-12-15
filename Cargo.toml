@@ -18,6 +18,7 @@ num-integer = { version = "*" }
 cached = { version = "*" }
 anyhow = { version = "1" }
 smallvec = { version = "1" }
+ndarray-slice = { version = "*", features = ["rayon"] }
 
 [features]
 bench = []

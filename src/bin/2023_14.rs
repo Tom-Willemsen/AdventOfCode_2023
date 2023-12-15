@@ -2,9 +2,11 @@
 use advent_of_code_2023::grid_util::make_byte_grid;
 use advent_of_code_2023::{Cli, Parser};
 use ahash::AHashMap;
-use ndarray::Array2;
+use ndarray::{s, Array2, ArrayView2, ArrayBase, SliceArg, SliceInfo};
 use rayon::prelude::*;
 use std::fs;
+use itertools::Itertools;
+use ndarray_slice::Slice1Ext;
 
 fn parse(raw_inp: &str) -> Array2<u8> {
     make_byte_grid(raw_inp.trim())
@@ -27,39 +29,47 @@ fn roll<const DIR: u8>(data: &mut Array2<u8>) {
     .into_iter()
     .par_bridge()
     .for_each(|mut slice| {
-        let mut rocks = slice
-            .iter()
-            .enumerate()
-            .filter(|(_, &itm)| itm == b'O')
+        let breaks = slice
+            .indexed_iter()
+            .filter(|(_, &itm)| itm == b'#')
             .map(|(idx, _)| idx)
             .collect::<Vec<_>>();
+            
+        let zero = Some(0_usize.wrapping_sub(1));
+        let mut slices = zero
+            .iter()
+            .copied()
+            .chain(breaks.into_iter())
+            .chain(Some(slice.len()))
+            .tuple_windows()
+            .map(|(start, stop)| s![start.wrapping_add(1)..stop])
+            .tuples::<(_, _, _, _)>();
 
-        while let Some(rock_idx) = rocks.pop() {
-            if slice.get(rock_idx) != Some(&b'O') {
-                continue;
-            }
-
-            let (prev_idx, next_idx) = match DIR {
-                SOUTH => (rock_idx.wrapping_sub(1), rock_idx.wrapping_add(1)),
-                EAST => (rock_idx.wrapping_sub(1), rock_idx.wrapping_add(1)),
-                NORTH => (rock_idx.wrapping_add(1), rock_idx.wrapping_sub(1)),
-                WEST => (rock_idx.wrapping_add(1), rock_idx.wrapping_sub(1)),
-                _ => panic!("invalid dir"),
-            };
-
-            if slice.get(next_idx) == Some(&b'.') {
-                slice[next_idx] = b'O';
-                slice[rock_idx] = b'.';
-
-                rocks.push(next_idx);
-
-                // If we just made space for a different rock to move,
-                // add that one to the queue.
-                if slice.get(prev_idx) == Some(&b'O') {
-                    rocks.push(prev_idx);
-                }
-            }
+        while let Some((t, )) = slices.next_tuple() {
+            let (ms1, ms2, ms3, ms4) = slice.multi_slice_mut(t);
+            [ms1, ms2, ms3, ms4]
+                .iter_mut()
+                .for_each(|sl: &mut ArrayBase<_, _>| {
+                    if DIR == SOUTH || DIR == EAST {
+                        sl.sort_unstable_by(|e1: &u8, e2: &u8| e1.cmp(&e2));
+                    } else {
+                        sl.sort_unstable_by(|e1: &u8, e2: &u8| e2.cmp(&e1));
+                    }
+                });
         }
+        
+        // Process remaining slices we couldn't do in parallel.
+        slices.into_buffer()
+            .into_iter()
+            .for_each(|sl| {
+                let mut sl = slice.slice_mut(sl);
+                if DIR == SOUTH || DIR == EAST {
+                    sl.sort_unstable_by(|e1, e2| e1.cmp(&e2));
+                } else {
+                    sl.sort_unstable_by(|e1, e2| e2.cmp(&e1));
+                }
+            });
+        
     });
 }
 

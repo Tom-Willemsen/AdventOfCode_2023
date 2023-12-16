@@ -1,7 +1,7 @@
 #![cfg_attr(feature = "bench", feature(test))]
 use advent_of_code_2023::grid_util::make_byte_grid;
 use advent_of_code_2023::{Cli, Parser};
-use ahash::AHashSet;
+use bitvec::prelude::*;
 use ndarray::Array2;
 use rayon::prelude::*;
 use std::fs;
@@ -15,22 +15,57 @@ const EAST: (isize, isize) = (0, 1);
 const SOUTH: (isize, isize) = (1, 0);
 const WEST: (isize, isize) = (0, -1);
 
-fn calculate(data: &Array2<u8>, initial_pos: (usize, usize), initial_dir: (isize, isize)) -> usize {
+struct SeenStartLocations {
+    y_size: usize,
+    x_size: usize,
+    seen: BitVec<u64>,
+}
+
+impl SeenStartLocations {
+    fn new(dims: (usize, usize)) -> SeenStartLocations {
+        SeenStartLocations {
+            y_size: dims.0,
+            x_size: dims.1,
+            seen: bitvec![u64, Lsb0; 0; dims.0 * dims.1 * 4],
+        }
+    }
+
+    // Returns whether this location was already set
+    fn insert(&mut self, loc: (usize, usize), dir: (isize, isize)) -> bool {
+        let mut result = false;
+        if loc.0 < self.y_size && loc.1 < self.x_size {
+            let idx = loc.0 * self.x_size * 4
+                + loc.1 * 4
+                + match dir {
+                    NORTH => 0,
+                    SOUTH => 1,
+                    EAST => 2,
+                    WEST => 3,
+                    _ => unreachable!(),
+                };
+            result = *self.seen.get(idx).unwrap();
+            self.seen.set(idx, true);
+        }
+        result
+    }
+}
+
+fn simulate(data: &Array2<u8>, initial_pos: (usize, usize), initial_dir: (isize, isize)) -> usize {
     let fake_start = (
         initial_pos.0.wrapping_add_signed(-initial_dir.0),
         initial_pos.1.wrapping_add_signed(-initial_dir.1),
     );
 
-    let mut starts = vec![(fake_start, initial_dir)];
+    let mut starts = Vec::with_capacity(32);
+    starts.push((fake_start, initial_dir));
 
-    let mut energised = Array2::from_elem(data.dim(), false);
-
-    let mut seen: AHashSet<((usize, usize), (isize, isize))> = AHashSet::with_capacity(1024);
+    let mut energised = bitvec![u64, Lsb0; 0; data.dim().0 * data.dim().1];
+    let mut seen_starts = SeenStartLocations::new(data.dim());
 
     while let Some((start_pos, dir)) = starts.pop() {
         // If this start/dir combination has been seen already, don't process it.
         // Beam can go in an infinite loop
-        if !seen.insert((start_pos, dir)) {
+        if seen_starts.insert(start_pos, dir) {
             continue;
         }
 
@@ -38,7 +73,7 @@ fn calculate(data: &Array2<u8>, initial_pos: (usize, usize), initial_dir: (isize
         let mut x = start_pos.1.wrapping_add_signed(dir.1);
 
         while let Some(&grid_cell) = data.get((y, x)) {
-            energised[(y, x)] = true;
+            energised.set(y * data.dim().1 + x, true);
 
             match (dir, grid_cell) {
                 (NORTH, b'-') => break,
@@ -87,11 +122,11 @@ fn calculate(data: &Array2<u8>, initial_pos: (usize, usize), initial_dir: (isize
         }
     }
 
-    energised.iter().filter(|&&x| x).count()
+    energised.count_ones()
 }
 
 fn calculate_p1(data: &Array2<u8>) -> usize {
-    calculate(data, (0, 0), EAST)
+    simulate(data, (0, 0), EAST)
 }
 
 fn calculate_p2(data: &Array2<u8>) -> usize {
@@ -101,8 +136,8 @@ fn calculate_p2(data: &Array2<u8>) -> usize {
                 .into_par_iter()
                 .map(|y| {
                     let (east, west) = rayon::join(
-                        || calculate(data, (y, 0), EAST),
-                        || calculate(data, (y, data.dim().1 - 1), WEST),
+                        || simulate(data, (y, 0), EAST),
+                        || simulate(data, (y, data.dim().1 - 1), WEST),
                     );
                     east.max(west)
                 })
@@ -114,8 +149,8 @@ fn calculate_p2(data: &Array2<u8>) -> usize {
                 .into_par_iter()
                 .map(|x| {
                     let (south, north) = rayon::join(
-                        || calculate(data, (0, x), SOUTH),
-                        || calculate(data, (data.dim().0 - 1, x), NORTH),
+                        || simulate(data, (0, x), SOUTH),
+                        || simulate(data, (data.dim().0 - 1, x), NORTH),
                     );
                     north.max(south)
                 })

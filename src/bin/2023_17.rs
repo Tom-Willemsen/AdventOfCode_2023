@@ -2,6 +2,7 @@
 use advent_of_code_2023::grid_util::make_byte_grid;
 use advent_of_code_2023::{Cli, Parser};
 use ndarray::{Array2, Array4};
+use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 use std::fs;
 
@@ -13,44 +14,74 @@ fn parse(raw_inp: &str) -> Array2<u8> {
 
 const DIRS: [(isize, isize); 4] = [(0, 1), (1, 0), (0, -1), (-1, 0)];
 
+#[derive(Eq, PartialEq)]
+struct State {
+    cost: usize,
+    pos: (usize, usize),
+    last_dir: (isize, isize),
+    dir_count: usize,
+}
+
+impl Ord for State {
+    fn cmp(&self, other: &Self) -> Ordering {
+        other.cost.cmp(&self.cost)
+    }
+}
+
+impl PartialOrd for State {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
 // Dijkstra
-fn pathfind<const MIN_MOVES: usize, const MAX_MOVES: usize>(data: &Array2<u8>) -> i32 {
+fn pathfind<const MIN_MOVES: usize, const MAX_MOVES: usize>(data: &Array2<u8>) -> usize {
     let mut heap = BinaryHeap::new();
     let start_pos = (0_usize, 0_usize);
-    heap.push((0, start_pos, DIRS[0], 1));
-    heap.push((0, start_pos, DIRS[1], 1));
+    heap.push(State {
+        cost: 0,
+        pos: start_pos,
+        last_dir: DIRS[0],
+        dir_count: 1,
+    });
+    heap.push(State {
+        cost: 0,
+        pos: start_pos,
+        last_dir: DIRS[1],
+        dir_count: 1,
+    });
 
     // (y, x, dir_idx, dir_count)
-    let mut costs = Array4::from_elem((data.dim().0, data.dim().1, 4, MAX_MOVES), i32::MIN);
+    let mut costs = Array4::from_elem((data.dim().0, data.dim().1, 4, MAX_MOVES), usize::MAX);
 
     let end = (data.dim().0 - 1, data.dim().1 - 1);
 
-    while let Some((cost, pos, last_dir, last_dir_count)) = heap.pop() {
+    while let Some(state) = heap.pop() {
         for (dir_idx, &dir) in DIRS.iter().enumerate() {
-            if dir == (-last_dir.0, -last_dir.1) {
+            if dir == (-state.last_dir.0, -state.last_dir.1) {
                 // Crucible not allowed to reverse directions
                 continue;
             }
 
-            let same_as_last_dir = dir == last_dir;
+            let same_as_last_dir = dir == state.last_dir;
 
-            if !same_as_last_dir && last_dir_count < MIN_MOVES {
+            if !same_as_last_dir && state.dir_count < MIN_MOVES {
                 continue;
             }
-            if same_as_last_dir && last_dir_count >= MAX_MOVES {
+            if same_as_last_dir && state.dir_count >= MAX_MOVES {
                 continue;
             }
 
             let next_pos = (
-                pos.0.wrapping_add_signed(dir.0),
-                pos.1.wrapping_add_signed(dir.1),
+                state.pos.0.wrapping_add_signed(dir.0),
+                state.pos.1.wrapping_add_signed(dir.1),
             );
 
             if let Some(&next_tile_cost) = data.get(next_pos) {
-                let next_cost = cost - (next_tile_cost as i32);
+                let next_cost = state.cost + (next_tile_cost as usize);
 
                 let dir_count = if same_as_last_dir {
-                    last_dir_count + 1
+                    state.dir_count + 1
                 } else {
                     1
                 };
@@ -58,9 +89,14 @@ fn pathfind<const MIN_MOVES: usize, const MAX_MOVES: usize>(data: &Array2<u8>) -
                 let prev_cost = costs[(next_pos.0, next_pos.1, dir_idx, dir_count - 1)];
 
                 if next_pos == end && dir_count >= MIN_MOVES {
-                    return -next_cost;
-                } else if next_cost > prev_cost {
-                    heap.push((next_cost, next_pos, dir, dir_count));
+                    return next_cost;
+                } else if next_cost < prev_cost {
+                    heap.push(State {
+                        cost: next_cost,
+                        pos: next_pos,
+                        last_dir: dir,
+                        dir_count,
+                    });
                     costs[(next_pos.0, next_pos.1, dir_idx, dir_count - 1)] = next_cost;
                 }
             }
@@ -70,11 +106,11 @@ fn pathfind<const MIN_MOVES: usize, const MAX_MOVES: usize>(data: &Array2<u8>) -
     panic!("no solution");
 }
 
-fn calculate_p1(data: &Array2<u8>) -> i32 {
+fn calculate_p1(data: &Array2<u8>) -> usize {
     pathfind::<0, 3>(data)
 }
 
-fn calculate_p2(data: &Array2<u8>) -> i32 {
+fn calculate_p2(data: &Array2<u8>) -> usize {
     pathfind::<4, 10>(data)
 }
 

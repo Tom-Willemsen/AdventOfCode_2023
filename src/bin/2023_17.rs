@@ -1,8 +1,7 @@
 #![cfg_attr(feature = "bench", feature(test))]
 use advent_of_code_2023::grid_util::make_byte_grid;
 use advent_of_code_2023::{Cli, Parser};
-use ahash::AHashMap;
-use ndarray::Array2;
+use ndarray::{Array2, Array4};
 use std::collections::BinaryHeap;
 use std::fs;
 
@@ -15,27 +14,30 @@ fn parse(raw_inp: &str) -> Array2<u8> {
 const DIRS: [(isize, isize); 4] = [(0, 1), (1, 0), (0, -1), (-1, 0)];
 
 // Dijkstra
-fn pathfind<const MIN_MOVES: usize, const MAX_MOVES: usize>(data: &Array2<u8>) -> i64 {
+fn pathfind<const MIN_MOVES: usize, const MAX_MOVES: usize>(data: &Array2<u8>) -> i32 {
     let mut heap = BinaryHeap::new();
     let start_pos = (0_usize, 0_usize);
     heap.push((0, start_pos, DIRS[0], 1));
     heap.push((0, start_pos, DIRS[1], 1));
 
-    let mut costs = AHashMap::default();
+    // (y, x, dir_idx, dir_count)
+    let mut costs = Array4::from_elem((data.dim().0, data.dim().1, 4, MAX_MOVES), i32::MIN);
 
     let end = (data.dim().0 - 1, data.dim().1 - 1);
 
     while let Some((cost, pos, last_dir, last_dir_count)) = heap.pop() {
-        for dir in DIRS {
+        for (dir_idx, &dir) in DIRS.iter().enumerate() {
             if dir == (-last_dir.0, -last_dir.1) {
                 // Crucible not allowed to reverse directions
                 continue;
             }
 
-            if dir != last_dir && last_dir_count < MIN_MOVES {
+            let same_as_last_dir = dir == last_dir;
+
+            if !same_as_last_dir && last_dir_count < MIN_MOVES {
                 continue;
             }
-            if dir == last_dir && last_dir_count >= MAX_MOVES {
+            if same_as_last_dir && last_dir_count >= MAX_MOVES {
                 continue;
             }
 
@@ -44,25 +46,22 @@ fn pathfind<const MIN_MOVES: usize, const MAX_MOVES: usize>(data: &Array2<u8>) -
                 pos.1.wrapping_add_signed(dir.1),
             );
 
-            if let Some(next_tile_cost) = data.get(next_pos) {
-                let next_cost = cost - (*next_tile_cost as i64);
+            if let Some(&next_tile_cost) = data.get(next_pos) {
+                let next_cost = cost - (next_tile_cost as i32);
 
-                let dir_count = if dir == last_dir {
+                let dir_count = if same_as_last_dir {
                     last_dir_count + 1
                 } else {
                     1
                 };
 
-                let next = (next_cost, next_pos, dir, dir_count);
-
-                let key = (next_pos, dir, dir_count);
-                let prev_cost = *costs.get(&key).unwrap_or(&i64::MIN);
+                let prev_cost = costs[(next_pos.0, next_pos.1, dir_idx, dir_count - 1)];
 
                 if next_pos == end && dir_count >= MIN_MOVES {
                     return -next_cost;
                 } else if next_cost > prev_cost {
-                    heap.push(next);
-                    costs.insert(key, next_cost);
+                    heap.push((next_cost, next_pos, dir, dir_count));
+                    costs[(next_pos.0, next_pos.1, dir_idx, dir_count - 1)] = next_cost;
                 }
             }
         }
@@ -71,11 +70,11 @@ fn pathfind<const MIN_MOVES: usize, const MAX_MOVES: usize>(data: &Array2<u8>) -
     panic!("no solution");
 }
 
-fn calculate_p1(data: &Array2<u8>) -> i64 {
+fn calculate_p1(data: &Array2<u8>) -> i32 {
     pathfind::<0, 3>(data)
 }
 
-fn calculate_p2(data: &Array2<u8>) -> i64 {
+fn calculate_p2(data: &Array2<u8>) -> i32 {
     pathfind::<4, 10>(data)
 }
 
@@ -85,8 +84,7 @@ fn main() {
     let inp = fs::read_to_string(args.input).expect("can't open input file");
 
     let data = parse(&inp);
-    let p1 = calculate_p1(&data);
-    let p2 = calculate_p2(&data);
+    let (p1, p2) = rayon::join(|| calculate_p1(&data), || calculate_p2(&data));
     println!("{}\n{}", p1, p2);
 }
 

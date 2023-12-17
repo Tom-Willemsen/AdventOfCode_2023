@@ -2,8 +2,6 @@
 use advent_of_code_2023::grid_util::make_byte_grid;
 use advent_of_code_2023::{Cli, Parser};
 use ndarray::{Array2, Array4};
-use std::cmp::Ordering;
-use std::collections::BinaryHeap;
 use std::fs;
 
 fn parse(raw_inp: &str) -> Array2<u8> {
@@ -14,50 +12,82 @@ fn parse(raw_inp: &str) -> Array2<u8> {
 
 const DIRS: [(isize, isize); 4] = [(0, 1), (1, 0), (0, -1), (-1, 0)];
 
-#[derive(Eq, PartialEq)]
+// Optimization: instead of using a Binary heap, which is rather general,
+// we can use a much faster implementation based on a ring buffer of stacks.
+//
+// We can do this because we know that we will only ever have < 10 distinct
+// priorities when we do the dijkstra search - since the max edge weight is 9
+//
+// This is approx 2x faster than a Binary Heap.
+struct RingBufferMinPriorityQueue<const SIZE: usize, T> {
+    smallest: usize,
+    stacks: [Vec<T>; SIZE],
+}
+
+impl<const SIZE: usize, T> RingBufferMinPriorityQueue<SIZE, T> {
+    const EMPTY_VEC: Vec<T> = vec![];
+
+    fn new(initial_smallest: usize) -> RingBufferMinPriorityQueue<SIZE, T> {
+        RingBufferMinPriorityQueue {
+            smallest: initial_smallest,
+            stacks: [Self::EMPTY_VEC; SIZE],
+        }
+    }
+
+    fn push(&mut self, priority: usize, item: T) {
+        debug_assert!(priority >= self.smallest && priority < self.smallest + SIZE);
+
+        let idx = priority % SIZE;
+        self.stacks[idx].push(item);
+    }
+
+    fn pop(&mut self) -> Option<(usize, T)> {
+        let orig_smallest = self.smallest;
+
+        for idx in orig_smallest..orig_smallest + SIZE {
+            if let Some(item) = self.stacks[idx % SIZE].pop() {
+                return Some((idx, item));
+            }
+            self.smallest += 1;
+        }
+        None
+    }
+}
+
 struct State {
-    cost: usize,
     pos: (usize, usize),
     last_dir: (isize, isize),
     dir_count: usize,
 }
 
-impl Ord for State {
-    fn cmp(&self, other: &Self) -> Ordering {
-        other.cost.cmp(&self.cost)
-    }
-}
-
-impl PartialOrd for State {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
 // Dijkstra
 fn pathfind<const MIN_MOVES: usize, const MAX_MOVES: usize>(data: &Array2<u8>) -> usize {
-    let mut heap = BinaryHeap::new();
-    let start_pos = (0_usize, 0_usize);
-    heap.push(State {
-        cost: 0,
-        pos: start_pos,
-        last_dir: DIRS[0],
-        dir_count: 1,
-    });
-    heap.push(State {
-        cost: 0,
-        pos: start_pos,
-        last_dir: DIRS[1],
-        dir_count: 1,
-    });
+    let mut heap: RingBufferMinPriorityQueue<16, _> = RingBufferMinPriorityQueue::new(0);
+    heap.push(
+        0,
+        State {
+            pos: (0, 0),
+            last_dir: DIRS[0],
+            dir_count: 1,
+        },
+    );
+    heap.push(
+        0,
+        State {
+            pos: (0, 0),
+            last_dir: DIRS[1],
+            dir_count: 1,
+        },
+    );
 
-    // (y, x, dir_idx, dir_count)
-    let mut costs = Array4::from_elem((data.dim().0, data.dim().1, 4, MAX_MOVES), usize::MAX);
+    // (dir_count, dir_idx, y, x, )
+    let mut costs = Array4::from_elem((MAX_MOVES, 4, data.dim().0, data.dim().1), usize::MAX);
 
     let end = (data.dim().0 - 1, data.dim().1 - 1);
 
-    while let Some(state) = heap.pop() {
-        for (dir_idx, &dir) in DIRS.iter().enumerate() {
+    while let Some((cost, state)) = heap.pop() {
+        for dir_idx in 0..4 {
+            let dir = DIRS[dir_idx];
             if dir == (-state.last_dir.0, -state.last_dir.1) {
                 // Crucible not allowed to reverse directions
                 continue;
@@ -78,7 +108,7 @@ fn pathfind<const MIN_MOVES: usize, const MAX_MOVES: usize>(data: &Array2<u8>) -
             );
 
             if let Some(&next_tile_cost) = data.get(next_pos) {
-                let next_cost = state.cost + (next_tile_cost as usize);
+                let next_cost = cost + (next_tile_cost as usize);
 
                 let dir_count = if same_as_last_dir {
                     state.dir_count + 1
@@ -86,18 +116,20 @@ fn pathfind<const MIN_MOVES: usize, const MAX_MOVES: usize>(data: &Array2<u8>) -
                     1
                 };
 
-                let prev_cost = costs[(next_pos.0, next_pos.1, dir_idx, dir_count - 1)];
+                let prev_cost = costs[(dir_count - 1, dir_idx, next_pos.0, next_pos.1)];
 
                 if next_pos == end && dir_count >= MIN_MOVES {
                     return next_cost;
                 } else if next_cost < prev_cost {
-                    heap.push(State {
-                        cost: next_cost,
-                        pos: next_pos,
-                        last_dir: dir,
-                        dir_count,
-                    });
-                    costs[(next_pos.0, next_pos.1, dir_idx, dir_count - 1)] = next_cost;
+                    heap.push(
+                        next_cost,
+                        State {
+                            pos: next_pos,
+                            last_dir: dir,
+                            dir_count,
+                        },
+                    );
+                    costs[(dir_count - 1, dir_idx, next_pos.0, next_pos.1)] = next_cost;
                 }
             }
         }

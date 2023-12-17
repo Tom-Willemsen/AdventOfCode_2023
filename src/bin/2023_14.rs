@@ -2,8 +2,7 @@
 use advent_of_code_2023::grid_util::make_byte_grid;
 use advent_of_code_2023::{Cli, Parser};
 use ahash::AHashMap;
-use ndarray::Array2;
-use rayon::prelude::*;
+use ndarray::{Array2, ArrayBase, Dim, ViewRepr};
 use std::fs;
 
 fn parse(raw_inp: &str) -> Array2<u8> {
@@ -15,6 +14,24 @@ const EAST: u8 = 1;
 const SOUTH: u8 = 2;
 const WEST: u8 = 3;
 
+// Encourage compiler to generate branchless code
+fn rearrange_slice<const DIR: u8>(
+    slice: &mut ArrayBase<ViewRepr<&mut u8>, Dim<[usize; 1]>>,
+    start: usize,
+    empty: usize,
+    rocks: usize,
+) {
+    if DIR == NORTH || DIR == WEST {
+        for i in 0..(rocks + empty) {
+            slice[start + i] = if i < rocks { b'O' } else { b'.' };
+        }
+    } else {
+        for i in 0..(rocks + empty) {
+            slice[start + i] = if i < empty { b'.' } else { b'O' };
+        }
+    }
+}
+
 #[inline(never)]
 fn roll<const DIR: u8>(data: &mut Array2<u8>) {
     match DIR {
@@ -22,44 +39,26 @@ fn roll<const DIR: u8>(data: &mut Array2<u8>) {
         SOUTH => data.columns_mut(),
         WEST => data.rows_mut(),
         EAST => data.rows_mut(),
-        _ => panic!("invalid dir"),
+        _ => unreachable!(),
     }
     .into_iter()
-    .par_bridge()
     .for_each(|mut slice| {
-        let mut rocks = slice
-            .iter()
-            .enumerate()
-            .filter(|(_, &itm)| itm == b'O')
-            .map(|(idx, _)| idx)
-            .collect::<Vec<_>>();
-
-        while let Some(rock_idx) = rocks.pop() {
-            if slice.get(rock_idx) != Some(&b'O') {
-                continue;
-            }
-
-            let (prev_idx, next_idx) = match DIR {
-                SOUTH => (rock_idx.wrapping_sub(1), rock_idx.wrapping_add(1)),
-                EAST => (rock_idx.wrapping_sub(1), rock_idx.wrapping_add(1)),
-                NORTH => (rock_idx.wrapping_add(1), rock_idx.wrapping_sub(1)),
-                WEST => (rock_idx.wrapping_add(1), rock_idx.wrapping_sub(1)),
-                _ => panic!("invalid dir"),
-            };
-
-            if slice.get(next_idx) == Some(&b'.') {
-                slice[next_idx] = b'O';
-                slice[rock_idx] = b'.';
-
-                rocks.push(next_idx);
-
-                // If we just made space for a different rock to move,
-                // add that one to the queue.
-                if slice.get(prev_idx) == Some(&b'O') {
-                    rocks.push(prev_idx);
+        let mut rocks = 0;
+        let mut empty = 0;
+        let mut start = 0;
+        for idx in 0..slice.len() {
+            match slice[idx] {
+                b'#' => {
+                    rearrange_slice::<DIR>(&mut slice, start, empty, rocks);
+                    start = idx + 1;
+                    rocks = 0;
+                    empty = 0;
                 }
+                b'O' => rocks += 1,
+                _ => empty += 1,
             }
         }
+        rearrange_slice::<DIR>(&mut slice, start, empty, rocks);
     });
 }
 
@@ -108,20 +107,14 @@ fn calculate_p2(mut data: Array2<u8>) -> usize {
 
     let final_grid = map
         .iter()
-        .filter(|(_, &v)| v == head + tail)
+        .find(|(_, &v)| v == head + tail)
         .map(|(k, _)| k)
-        .next()
         .expect("no valid answer?");
 
     calculate_total_load(final_grid)
 }
 
 fn main() {
-    rayon::ThreadPoolBuilder::new()
-        .num_threads(8)
-        .build_global()
-        .unwrap();
-
     let args = Cli::parse();
 
     let inp = fs::read_to_string(args.input).expect("can't open input file");

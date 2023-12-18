@@ -1,6 +1,5 @@
 #![cfg_attr(feature = "bench", feature(test))]
 use advent_of_code_2023::{Cli, Parser};
-use itertools::Itertools;
 use std::fs;
 
 struct RawInst<'a> {
@@ -46,19 +45,12 @@ fn convert_hex(h: &str) -> Inst {
     Inst { dir, dist }
 }
 
-struct VerticalLine {
-    x: i64,
-    y_start: i64,
-    y_end: i64,
-}
-
-fn dig(data: &[Inst]) -> (Vec<VerticalLine>, i64) {
-    let mut dug_vertical_lines = vec![];
-    let mut undercount = 0;
-
-    let mut x = 0;
+// shoelace formula + picks theorem
+fn dig_and_fill(data: &[Inst]) -> i64 {
+    let mut area = 0;
+    let mut perimeter = 0;
     let mut y = 0;
-
+    let mut x = 0;
     for inst in data {
         let dir = match inst.dir {
             b'L' => (0, -1),
@@ -68,67 +60,19 @@ fn dig(data: &[Inst]) -> (Vec<VerticalLine>, i64) {
             _ => panic!("invalid dir"),
         };
 
-        let start_y = y;
-        let start_x = x;
+        let new_y = y + dir.0 * inst.dist;
+        let new_x = x + dir.1 * inst.dist;
 
-        y += dir.0 * inst.dist;
-        x += dir.1 * inst.dist;
+        area += (y + new_y) * (x - new_x);
+        perimeter += inst.dist;
 
-        if inst.dir == b'U' || inst.dir == b'D' {
-            dug_vertical_lines.push(VerticalLine {
-                x,
-                y_start: y.min(start_y),
-                y_end: y.max(start_y) - 1,
-            });
-        } else if inst.dir == b'L' {
-            // If going left now, we previously undercounted by stopping
-            // too early. So explicitly add the cells dug precisely along this
-            // row.
-            undercount += (start_x - x).abs();
-        }
+        y = new_y;
+        x = new_x;
     }
 
-    assert!(y == 0 && x == 0, "should have dug in a loop");
+    assert!(x == 0 && y == 0, "shape not closed");
 
-    (dug_vertical_lines, undercount)
-}
-
-fn dig_and_fill(inst: &[Inst]) -> i64 {
-    let (dug_vertical_lines, undercount) = dig(inst);
-
-    // Be extra careful around transition points
-    let mut interesting_y = dug_vertical_lines
-        .iter()
-        .flat_map(|line| [line.y_start, line.y_end + 1])
-        .collect::<Vec<_>>();
-
-    interesting_y.sort_unstable();
-
-    undercount
-        + 1
-        + interesting_y
-            .iter()
-            .tuple_windows()
-            .filter(|(y1, y2)| y2 != y1)
-            .map(|(y1, y2)| {
-                let mut crossings = dug_vertical_lines
-                    .iter()
-                    .filter(|line| line.y_start <= *y1 && line.y_end >= *y1)
-                    .map(|line| line.x)
-                    .collect::<Vec<i64>>();
-
-                crossings.sort_unstable();
-
-                debug_assert!(crossings.len() % 2 == 0);
-
-                (y2 - y1)
-                    * crossings
-                        .into_iter()
-                        .tuples()
-                        .map(|(x1, x2)| (x2 - x1) + 1)
-                        .sum::<i64>()
-            })
-            .sum::<i64>()
+    (area.abs() + perimeter) / 2 + 1
 }
 
 fn calculate_p1(inst: &[RawInst]) -> i64 {

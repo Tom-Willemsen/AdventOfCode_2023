@@ -86,6 +86,9 @@ fn pathfind<const MIN_MOVES: usize, const MAX_MOVES: usize>(data: &Array2<u8>) -
     let end = (data.dim().0 - 1, data.dim().1 - 1);
 
     while let Some((cost, state)) = heap.pop() {
+        if state.pos == end && state.dir_count >= MIN_MOVES {
+            return cost;
+        }
         for dir_idx in 0..4 {
             let dir = DIRS[dir_idx];
             if dir == (-state.last_dir.0, -state.last_dir.1) {
@@ -118,9 +121,7 @@ fn pathfind<const MIN_MOVES: usize, const MAX_MOVES: usize>(data: &Array2<u8>) -
 
                 let prev_cost = costs[(dir_count - 1, dir_idx, next_pos.0, next_pos.1)];
 
-                if next_pos == end && dir_count >= MIN_MOVES {
-                    return next_cost;
-                } else if next_cost < prev_cost {
+                if next_cost < prev_cost {
                     heap.push(
                         next_cost,
                         State {

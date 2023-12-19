@@ -138,36 +138,19 @@ fn calculate_p1(data: &Array2<u8>) -> usize {
 }
 
 fn calculate_p2(data: &Array2<u8>) -> usize {
-    let (best_y, best_x) = rayon::join(
-        || {
-            (0..data.dim().0)
-                .into_par_iter()
-                .map(|y| {
-                    let (east, west) = rayon::join(
-                        || simulate(data, (y, 0), EAST),
-                        || simulate(data, (y, data.dim().1 - 1), WEST),
-                    );
-                    east.max(west)
-                })
-                .max()
-                .expect("should have y size")
-        },
-        || {
-            (0..data.dim().1)
-                .into_par_iter()
-                .map(|x| {
-                    let (south, north) = rayon::join(
-                        || simulate(data, (0, x), SOUTH),
-                        || simulate(data, (data.dim().0 - 1, x), NORTH),
-                    );
-                    north.max(south)
-                })
-                .max()
-                .expect("should have x size")
-        },
-    );
-
-    best_y.max(best_x)
+    (0..data.dim().0)
+        .into_par_iter()
+        .flat_map(|d| {
+            [
+                ((d, 0), EAST),
+                ((d, data.dim().1 - 1), WEST),
+                ((0, d), SOUTH),
+                ((data.dim().0 - 1, d), NORTH),
+            ]
+        })
+        .map(|(start, dir)| simulate(data, start, dir))
+        .max()
+        .expect("should have an element")
 }
 
 fn main() {

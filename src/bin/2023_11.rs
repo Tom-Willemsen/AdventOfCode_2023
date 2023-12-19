@@ -51,8 +51,8 @@ fn make_cumulative_sum<const P1_MUL: usize, const P2_MUL: usize, F>(
 where
     F: Fn(usize) -> bool,
 {
-    let mut csum_p1 = vec![];
-    let mut csum_p2 = vec![];
+    let mut csum_p1 = Vec::with_capacity(n);
+    let mut csum_p2 = Vec::with_capacity(n);
 
     for i in 0..n {
         let add_many = add_many_rows(i);

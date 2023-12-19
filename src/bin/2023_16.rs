@@ -18,7 +18,7 @@ const WEST: (isize, isize) = (0, -1);
 struct SeenStartLocations {
     y_size: usize,
     x_size: usize,
-    seen: BitVec<u64>,
+    seen: BitVec<u32>,
 }
 
 impl SeenStartLocations {
@@ -26,7 +26,7 @@ impl SeenStartLocations {
         SeenStartLocations {
             y_size: dims.0,
             x_size: dims.1,
-            seen: bitvec![u64, Lsb0; 0; dims.0 * dims.1 * 4],
+            seen: bitvec![u32, Lsb0; 0; dims.0 * dims.1 * 4],
         }
     }
 
@@ -59,7 +59,7 @@ fn simulate(data: &Array2<u8>, initial_pos: (usize, usize), initial_dir: (isize,
     let mut starts = Vec::with_capacity(32);
     starts.push((fake_start, initial_dir));
 
-    let mut energised = bitvec![u64, Lsb0; 0; data.dim().0 * data.dim().1];
+    let mut energised = bitvec![u32, Lsb0; 0; data.dim().0 * data.dim().1];
     let mut seen_starts = SeenStartLocations::new(data.dim());
 
     while let Some((start_pos, dir)) = starts.pop() {
@@ -76,48 +76,56 @@ fn simulate(data: &Array2<u8>, initial_pos: (usize, usize), initial_dir: (isize,
             energised.set(y * data.dim().1 + x, true);
 
             match (dir, grid_cell) {
-                (NORTH, b'-') => break,
-                (SOUTH, b'-') => break,
-                (EAST, b'|') => break,
-                (WEST, b'|') => break,
-                (_, b'/') => break,
-                (_, b'\\') => break,
-                _ => {}
-            }
-
-            y = y.wrapping_add_signed(dir.0);
-            x = x.wrapping_add_signed(dir.1);
-        }
-
-        let end = (y, x);
-
-        if let Some(&cell) = data.get(end) {
-            match (dir, cell) {
-                (NORTH, b'/') => starts.push((end, EAST)),
-                (SOUTH, b'/') => starts.push((end, WEST)),
-                (EAST, b'/') => starts.push((end, NORTH)),
-                (WEST, b'/') => starts.push((end, SOUTH)),
-                (NORTH, b'\\') => starts.push((end, WEST)),
-                (SOUTH, b'\\') => starts.push((end, EAST)),
-                (EAST, b'\\') => starts.push((end, SOUTH)),
-                (WEST, b'\\') => starts.push((end, NORTH)),
-                (EAST, b'|') => {
-                    starts.push((end, NORTH));
-                    starts.push((end, SOUTH));
-                }
-                (WEST, b'|') => {
-                    starts.push((end, NORTH));
-                    starts.push((end, SOUTH));
-                }
                 (NORTH, b'-') => {
-                    starts.push((end, EAST));
-                    starts.push((end, WEST));
+                    starts.push(((y, x), EAST));
+                    starts.push(((y, x), WEST));
+                    break;
                 }
                 (SOUTH, b'-') => {
-                    starts.push((end, EAST));
-                    starts.push((end, WEST));
+                    starts.push(((y, x), EAST));
+                    starts.push(((y, x), WEST));
+                    break;
                 }
-                _ => {}
+                (EAST, b'|') => {
+                    starts.push(((y, x), NORTH));
+                    starts.push(((y, x), SOUTH));
+                    break;
+                }
+                (WEST, b'|') => {
+                    starts.push(((y, x), NORTH));
+                    starts.push(((y, x), SOUTH));
+                    break;
+                }
+                (_, b'/') => {
+                    starts.push((
+                        (y, x),
+                        match dir {
+                            NORTH => EAST,
+                            EAST => NORTH,
+                            SOUTH => WEST,
+                            WEST => SOUTH,
+                            _ => unreachable!(),
+                        },
+                    ));
+                    break;
+                }
+                (_, b'\\') => {
+                    starts.push((
+                        (y, x),
+                        match dir {
+                            NORTH => WEST,
+                            EAST => SOUTH,
+                            SOUTH => EAST,
+                            WEST => NORTH,
+                            _ => unreachable!(),
+                        },
+                    ));
+                    break;
+                }
+                _ => {
+                    y = y.wrapping_add_signed(dir.0);
+                    x = x.wrapping_add_signed(dir.1);
+                }
             }
         }
     }

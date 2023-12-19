@@ -2,6 +2,7 @@
 use advent_of_code_2023::{Cli, Parser};
 use ahash::AHashMap;
 use rayon::prelude::*;
+use std::cell::RefCell;
 use std::fs;
 
 struct Data {
@@ -117,16 +118,22 @@ fn get_possible_paths(data: &Data, state: State, cache: &mut AHashMap<State, u64
     res
 }
 
+thread_local! {
+    static CACHE: RefCell<AHashMap<State, u64>> = RefCell::new(AHashMap::with_capacity(2048));
+}
+
 fn calculate_p1(data: &[Data]) -> u64 {
     data.par_iter()
         .map(|d| {
-            let mut cache = AHashMap::default();
             let initial_state = State {
                 consumed_counts: 0,
                 consumed_items: 0,
                 current_run: 0,
             };
-            get_possible_paths(d, initial_state, &mut cache)
+            CACHE.with_borrow_mut(|cache| {
+                cache.clear();
+                get_possible_paths(d, initial_state, cache)
+            })
         })
         .sum()
 }
@@ -134,8 +141,8 @@ fn calculate_p1(data: &[Data]) -> u64 {
 fn calculate_p2(data: &[Data]) -> u64 {
     data.par_iter()
         .map(|d| {
-            let mut new_items = vec![];
-            let mut new_counts = vec![];
+            let mut new_items = Vec::with_capacity(4 * (d.items.len() + 1));
+            let mut new_counts = Vec::with_capacity(5 * d.counts.len());
 
             for _ in 0..4 {
                 new_items.extend(d.items.clone());
@@ -153,13 +160,15 @@ fn calculate_p2(data: &[Data]) -> u64 {
             }
         })
         .map(|d| {
-            let mut cache = AHashMap::default();
             let initial_state = State {
                 consumed_counts: 0,
                 consumed_items: 0,
                 current_run: 0,
             };
-            get_possible_paths(&d, initial_state, &mut cache)
+            CACHE.with_borrow_mut(|cache| {
+                cache.clear();
+                get_possible_paths(&d, initial_state, cache)
+            })
         })
         .sum()
 }

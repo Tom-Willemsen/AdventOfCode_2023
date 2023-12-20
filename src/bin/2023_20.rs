@@ -66,16 +66,25 @@ fn simulate<'a, FB, FP>(
 
     let broadcast = modules.get(BROADCASTER).unwrap();
 
-    let mut pulse_queue = VecDeque::default();
+    let mut pulse_queue = VecDeque::with_capacity(512);
 
     let mut flipflop_states = AHashMap::default();
-    let mut conj_states: AHashMap<(&str, &str), Pulse> = AHashMap::default();
+    let mut conj_states: AHashMap<&str, AHashMap<&str, Pulse>> = AHashMap::default();
 
     modules.iter().for_each(|(&name, m)| {
         for &tgt in &m.outputs {
             if let Some(tgt_module) = modules.get(tgt) {
                 if tgt_module.typ == ModuleType::Conjunction {
-                    conj_states.insert((name, tgt), Pulse::Low);
+                    conj_states
+                        .entry(tgt)
+                        .and_modify(|e| {
+                            e.insert(name, Pulse::Low);
+                        })
+                        .or_insert_with(|| {
+                            let mut m = AHashMap::default();
+                            m.insert(name, Pulse::Low);
+                            m
+                        });
                 }
             }
         }
@@ -85,7 +94,7 @@ fn simulate<'a, FB, FP>(
         total_pushes += 1;
 
         for o in &broadcast.outputs {
-            pulse_queue.push_back((Pulse::Low, o, "broadcaster"));
+            pulse_queue.push_back((Pulse::Low, o, BROADCASTER));
         }
 
         while let Some((pulse, dest, src)) = pulse_queue.pop_front() {
@@ -97,37 +106,37 @@ fn simulate<'a, FB, FP>(
                 match module.typ {
                     ModuleType::Flipflop => {
                         if pulse == Pulse::Low {
-                            if flipflop_state == FlipFlopState::Off {
-                                for d in &module.outputs {
-                                    pulse_queue.push_back((Pulse::High, d, dest));
-                                }
-                                flipflop_states.insert(dest, FlipFlopState::On);
+                            let (new_pulse, new_state) = if flipflop_state == FlipFlopState::Off {
+                                (Pulse::High, FlipFlopState::On)
                             } else {
-                                for d in &module.outputs {
-                                    pulse_queue.push_back((Pulse::Low, d, dest));
-                                }
-                                flipflop_states.insert(dest, FlipFlopState::Off);
+                                (Pulse::Low, FlipFlopState::Off)
+                            };
+
+                            for d in &module.outputs {
+                                pulse_queue.push_back((new_pulse, d, dest));
                             }
+                            flipflop_states.insert(dest, new_state);
                         }
                     }
                     ModuleType::Conjunction => {
-                        conj_states.insert((src, dest), pulse);
+                        conj_states.get_mut(dest).unwrap().insert(src, pulse);
 
-                        if conj_states
-                            .iter()
-                            .filter(|((_, module_name), _)| module_name == dest)
-                            .all(|(_, v)| v == &Pulse::High)
+                        let new_pulse = if conj_states
+                            .get_mut(dest)
+                            .unwrap()
+                            .values()
+                            .all(|v| v == &Pulse::High)
                         {
-                            for d in &module.outputs {
-                                pulse_queue.push_back((Pulse::Low, d, dest));
-                            }
+                            Pulse::Low
                         } else {
-                            for d in &module.outputs {
-                                pulse_queue.push_back((Pulse::High, d, dest));
-                            }
+                            Pulse::High
+                        };
+
+                        for d in &module.outputs {
+                            pulse_queue.push_back((new_pulse, d, dest));
                         }
                     }
-                    _ => unreachable!(),
+                    ModuleType::Broadcaster => unreachable!(),
                 }
             }
         }
@@ -153,7 +162,7 @@ fn calculate_p1(modules: &AHashMap<&str, Module>) -> i64 {
 const END_MODULE: &str = "rx";
 
 fn calculate_p2(modules: &AHashMap<&str, Module>) -> usize {
-    let need_low_pulses = RefCell::new(AHashMap::default());
+    let need_low_pulses = RefCell::new(AHashMap::with_capacity(8));
 
     let final_module_name = modules
         .iter()
@@ -181,10 +190,8 @@ fn calculate_p2(modules: &AHashMap<&str, Module>) -> usize {
         |pulse, dest, button_presses| {
             let mut need_low_pulses = need_low_pulses.borrow_mut();
             if pulse == Pulse::Low {
-                if let Some(c) = need_low_pulses.get(dest) {
-                    if c.is_none() {
-                        need_low_pulses.insert(dest, Some(button_presses));
-                    }
+                if let Some(None) = need_low_pulses.get(dest) {
+                    need_low_pulses.insert(dest, Some(button_presses));
                 }
             }
         },

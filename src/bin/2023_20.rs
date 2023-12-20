@@ -53,15 +53,9 @@ fn parse(raw_inp: &str) -> AHashMap<&str, Module> {
         .collect()
 }
 
-fn simulate<'a, FB, FP>(
-    modules: &AHashMap<&'a str, Module<'a>>,
-    should_continue: FB,
-    mut on_pulse_received: FP,
-) where
-    FB: Fn(usize) -> bool,
-    FP: FnMut(Pulse, &'a str, usize),
-{
-    let mut total_pushes = 0;
+fn calculate_p1<'a>(modules: &AHashMap<&'a str, Module<'a>>) -> i64 {
+    let mut total_low_pulses = 1000;
+    let mut total_high_pulses = 0;
 
     let broadcast = modules.get(BROADCASTER).unwrap();
 
@@ -89,15 +83,16 @@ fn simulate<'a, FB, FP>(
         }
     });
 
-    while should_continue(total_pushes) {
-        total_pushes += 1;
-
+    for _ in 0..1000 {
         for o in &broadcast.outputs {
             pulse_queue.push_back((Pulse::Low, o, BROADCASTER));
         }
 
         while let Some((pulse, dest, src)) = pulse_queue.pop_front() {
-            on_pulse_received(pulse, dest, total_pushes);
+            match pulse {
+                Pulse::Low => total_low_pulses += 1,
+                Pulse::High => total_high_pulses += 1,
+            }
 
             if let Some(module) = modules.get(dest) {
                 let flipflop_state = *flipflop_states.get(&dest).unwrap_or(&FlipFlopState::Off);
@@ -140,20 +135,6 @@ fn simulate<'a, FB, FP>(
             }
         }
     }
-}
-
-fn calculate_p1(modules: &AHashMap<&str, Module>) -> i64 {
-    let mut total_low_pulses = 1000;
-    let mut total_high_pulses = 0;
-
-    simulate(
-        modules,
-        |p| p < 1000,
-        |pulse, _, _| match pulse {
-            Pulse::Low => total_low_pulses += 1,
-            Pulse::High => total_high_pulses += 1,
-        },
-    );
 
     total_low_pulses * total_high_pulses
 }
@@ -194,15 +175,15 @@ fn calculate_p2(modules: &AHashMap<&str, Module>) -> usize {
         .unwrap()
         .outputs
         .iter()
-        .map(|m| {
-            let mut r = 0;
-            let mut current_mod = m;
-            let mut f = 1;
+        .map(|module| {
+            let mut result = 0;
+            let mut current_mod = module;
+            let mut p = 1;
 
             loop {
                 match modules.get(current_mod).unwrap().outputs.len() {
                     1 => {}
-                    2 => r += f,
+                    2 => result += p,
                     _ => unreachable!(),
                 }
 
@@ -215,11 +196,11 @@ fn calculate_p2(modules: &AHashMap<&str, Module>) -> usize {
                 {
                     current_mod = next_mod;
                 } else {
-                    r += f; // Last module always connected to checker
-                    break r;
+                    result += p; // Last module always connected to checker
+                    break result;
                 }
 
-                f *= 2;
+                p *= 2;
             }
         })
         .fold(1, |acc, e| acc.lcm(&e))

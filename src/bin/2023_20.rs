@@ -2,7 +2,6 @@
 use advent_of_code_2023::{Cli, Parser};
 use ahash::AHashMap;
 use num::Integer;
-use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::fs;
 
@@ -122,7 +121,7 @@ fn simulate<'a, FB, FP>(
                         conj_states.get_mut(dest).unwrap().insert(src, pulse);
 
                         let new_pulse = if conj_states
-                            .get_mut(dest)
+                            .get(dest)
                             .unwrap()
                             .values()
                             .all(|v| v == &Pulse::High)
@@ -161,48 +160,69 @@ fn calculate_p1(modules: &AHashMap<&str, Module>) -> i64 {
 
 const END_MODULE: &str = "rx";
 
+// Aggressively optimized for the AoC inputs:
+// - The structure of the inputs is 4 12-bit cycling binary counters
+// - All of them must "line up" for the final output to fire (which
+//   is the final puzzle answer we want)
+//
+// This method extracts those binary counters directly, never needing
+// to "push the button".
+//
+// Should be general enough for any AoC input. The whole AoC problem
+// is intractable for "general" inputs anyway.
 fn calculate_p2(modules: &AHashMap<&str, Module>) -> usize {
-    let need_low_pulses = RefCell::new(AHashMap::with_capacity(8));
-
     let final_module_name = modules
         .iter()
         .find(|(_, m)| m.outputs.contains(&END_MODULE))
         .map(|(name, _)| name)
         .expect("can't find module that outputs to rx");
 
-    modules.iter().for_each(|(&name, m)| {
-        for tgt in &m.outputs {
-            if tgt == final_module_name {
-                assert!(m.typ == ModuleType::Conjunction);
-                need_low_pulses.borrow_mut().insert(name, None);
-            }
-        }
-    });
+    let accumulators = modules
+        .iter()
+        .filter(|(_, m)| m.outputs.contains(final_module_name))
+        .map(|(name, _)| name)
+        .collect::<Vec<_>>();
 
-    assert!(
-        need_low_pulses.borrow().len() >= 1,
-        "didn't find conjunction modules"
-    );
+    let checkers = modules
+        .iter()
+        .filter(|(_, m)| accumulators.iter().any(|a| m.outputs.contains(a)))
+        .map(|(name, _)| name)
+        .collect::<Vec<_>>();
 
-    simulate(
-        modules,
-        |_| need_low_pulses.borrow().values().any(|p| p.is_none()),
-        |pulse, dest, button_presses| {
-            let mut need_low_pulses = need_low_pulses.borrow_mut();
-            if pulse == Pulse::Low {
-                if let Some(None) = need_low_pulses.get(dest) {
-                    need_low_pulses.insert(dest, Some(button_presses));
+    modules
+        .get(BROADCASTER)
+        .unwrap()
+        .outputs
+        .iter()
+        .map(|m| {
+            let mut r = 0;
+            let mut current_mod = m;
+            let mut f = 1;
+
+            loop {
+                match modules.get(current_mod).unwrap().outputs.len() {
+                    1 => {}
+                    2 => r += f,
+                    _ => unreachable!(),
                 }
-            }
-        },
-    );
 
-    let p2 = need_low_pulses
-        .borrow()
-        .values()
-        .filter_map(|&v| v)
-        .fold(1, |acc, e| acc.lcm(&e));
-    p2
+                if let Some(next_mod) = modules
+                    .get(current_mod)
+                    .unwrap()
+                    .outputs
+                    .iter()
+                    .find(|o| !checkers.contains(o))
+                {
+                    current_mod = next_mod;
+                } else {
+                    r += f; // Last module always connected to checker
+                    break r;
+                }
+
+                f *= 2;
+            }
+        })
+        .fold(1, |acc, e| acc.lcm(&e))
 }
 
 fn main() {
@@ -211,7 +231,8 @@ fn main() {
     let inp = fs::read_to_string(args.input).expect("can't open input file");
 
     let data = parse(&inp);
-    let (p1, p2) = rayon::join(|| calculate_p1(&data), || calculate_p2(&data));
+    let p1 = calculate_p1(&data);
+    let p2 = calculate_p2(&data);
     println!("{}\n{}", p1, p2);
 }
 

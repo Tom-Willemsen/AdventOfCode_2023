@@ -1,9 +1,9 @@
 #![cfg_attr(feature = "bench", feature(test))]
 use advent_of_code_2023::grid_util::make_byte_grid;
 use advent_of_code_2023::{Cli, Parser};
+use ahash::AHashSet;
 use ndarray::Array2;
 use std::fs;
-use ahash::{AHashSet, AHashMap};
 
 fn parse(raw_inp: &str) -> Array2<u8> {
     make_byte_grid(raw_inp.trim())
@@ -11,18 +11,20 @@ fn parse(raw_inp: &str) -> Array2<u8> {
 
 fn calculate_p1<const N: usize>(data: &Array2<u8>) -> usize {
     let mut reachable = AHashSet::default();
-    
-    let start = data.indexed_iter()
+    let mut newly_reachable = AHashSet::default();
+
+    let start = data
+        .indexed_iter()
         .filter(|(_, itm)| itm == &&b'S')
         .map(|(idx, _)| idx)
         .next()
         .expect("no start");
-        
+
     reachable.insert(start);
-    
+
     for _ in 0..N {
-        let mut newly_reachable = AHashSet::default();
-        
+        newly_reachable.clear();
+
         for itm in reachable.iter() {
             let x = itm.1;
             let y = itm.0;
@@ -32,145 +34,231 @@ fn calculate_p1<const N: usize>(data: &Array2<u8>) -> usize {
             if data.get((y, x.wrapping_add_signed(-1))) == Some(&b'.') {
                 newly_reachable.insert((y, x.wrapping_add_signed(-1)));
             }
-            if data.get((y+1, x)) == Some(&b'.') {
+            if data.get((y + 1, x)) == Some(&b'.') {
                 newly_reachable.insert((y.wrapping_add_signed(1), x));
             }
-            if data.get((y, x+1)) == Some(&b'.') {
+            if data.get((y, x + 1)) == Some(&b'.') {
                 newly_reachable.insert((y, x.wrapping_add_signed(1)));
             }
         }
-        
+
         std::mem::swap(&mut reachable, &mut newly_reachable);
     }
-    
-    reachable.len() + 1
+
+    reachable.len() + 1 // +1 because we didn't count "S"
 }
 
-fn floodfill(data: &Array2<u8>, start: (usize, usize)) -> Array2<Option<usize>> {
-    let mut costs = Array2::from_elem(data.dim(), None);
-    
-    let mut q = vec![];
-    q.push((start, 0));
-    
-    while let Some((pos, cost)) = q.pop() {
-        let y = pos.0;
-        let x = pos.1;
-        
-        let old_cost = costs[pos].unwrap_or(usize::MAX);
-        let new_cost = old_cost.min(cost);
-        
-        costs[pos] = Some(new_cost);
-        
-        if new_cost < old_cost {
-            if let Some(b'.') = data.get((y.wrapping_sub(1), x)) {
-                q.push(((y-1, x), cost + 1));
-            }
-            if let Some(b'.') = data.get((y+1, x)) {
-                q.push(((y+1, x), cost + 1));
-            }
-            if let Some(b'.') = data.get((y, x.wrapping_sub(1))) {
-                q.push(((y, x-1), cost + 1));
-            }
-            if let Some(b'.') = data.get((y, x+1)) {
-                q.push(((y, x+1), cost + 1));
-            }
-        }
-    }
-    
-    costs
+#[derive(Debug)]
+struct RepetitionParameters {
+    // Num reachable squares on last tiles
+    // *directly* east/west/north/east of start.
+    extremities: [u64; 4],
+    // Score per outer corner - for odd tiles
+    // Reachable in tile_size/2 steps from corner
+    outer_corners: [u64; 4],
+    // Score per inner corner - for inner tiles
+    // Reachable in 3*tile_size/2 steps from corner
+    inner_corners: [u64; 4],
+    // Score per even tile
+    even_tile_score: u64,
+    // Score per odd tile
+    odd_tile_score: u64,
 }
 
-fn calculate_p2<const N: i64>(data: &Array2<u8>) -> i64 {
-    
-    let start = data.indexed_iter()
+fn get_repetition_parameters(data: &Array2<u8>) -> RepetitionParameters {
+    let mut reachable = AHashSet::default();
+    let mut newly_reachable = AHashSet::default();
+
+    let mut data = data.clone();
+
+    let start = data
+        .indexed_iter()
         .filter(|(_, itm)| itm == &&b'S')
         .map(|(idx, _)| idx)
         .next()
         .expect("no start");
-        
-    let mut data = data.clone();
+
     data[start] = b'.';
-    
-    println!("start: {:?}", start);
-    
-    let score_per_complete_even_tile = data.indexed_iter()
-        .filter(|(_, t)| t == &&b'.')
-        .filter(|(idx, _)| (idx.0 + idx.1) % 2 == 0)
-        .count() as i64;
-        
-    let score_per_complete_odd_tile = data.indexed_iter()
-        .filter(|(_, t)| t == &&b'.')
-        .filter(|(idx, _)| (idx.0 + idx.1) % 2 == 1)
-        .count() as i64;
-    
-    let full_tile = data.dim().0 as i64;
-    let half_tile = data.dim().0 / 2;
-        
-    println!("score per complete even tile: {}", score_per_complete_even_tile);
-    println!("score per complete odd tile: {}", score_per_complete_odd_tile);
-    
-    println!("dims: {:?}", data.dim());
-    
-    let top_left_even_score = data.indexed_iter()
-        .filter(|(_, t)| t == &&b'.')
-        .filter(|(idx, _)| (idx.0 + idx.1) % 2 == 0)
-        .filter(|((y, x), _)| y <= &half_tile && x <= &half_tile)
-        .count() as i64;
-    
-    let bottom_left_even_score = data.indexed_iter()
-        .filter(|(_, t)| t == &&b'.')
-        .filter(|(idx, _)| (idx.0 + idx.1) % 2 == 0)
-        .filter(|((y, x), _)| y >= &half_tile && x <= &half_tile)
-        .count() as i64;
-    
-    let top_right_even_score = data.indexed_iter()
-        .filter(|(_, t)| t == &&b'.')
-        .filter(|(idx, _)| (idx.0 + idx.1) % 2 == 0)
-        .filter(|((y, x), _)| y <= &half_tile && x >= &half_tile)
-        .count() as i64;
-    
-    let bottom_right_even_score = data.indexed_iter()
-        .filter(|(_, t)| t == &&b'.')
-        .filter(|(idx, _)| (idx.0 + idx.1) % 2 == 0)
-        .filter(|((y, x), _)| y >= &half_tile && x >= &half_tile)
-        .count() as i64;
-        
-    println!("top left even score: {}", top_left_even_score);
-    println!("bottom left even score: {}", bottom_left_even_score);
-    println!("top right even score: {}", top_right_even_score);
-    println!("bottom right even score: {}", bottom_right_even_score);
-    
-    let top = (N - start.0 as i64) / full_tile;
-    
-    let permiteter_score = (N / full_tile) * (top_left_even_score + bottom_right_even_score + top_right_even_score + bottom_left_even_score) +
-        (N / full_tile) * ((score_per_complete_even_tile - top_left_even_score) 
-                            + (score_per_complete_even_tile - bottom_right_even_score) 
-                            + (score_per_complete_even_tile - top_right_even_score) 
-                            + (score_per_complete_even_tile - bottom_left_even_score)) / 2;
-    
-    println!("permiteter score: {}", permiteter_score);
-    
-    // Note: not including centre tile at this point.
-    //
-    // sum_(n=1)^n 2 n = n (n + 1)
-    
-    let t = N / (2*full_tile);
-    
-    println!("t={}, 2*t={}", t, 2*t);
-    
-    let even_tiles_score = if t > 1 { (t-1) * (t) * score_per_complete_even_tile } else { 0 };
-    
-    let odd_tiles_score = if t > 1 { (t) * (t) * score_per_complete_odd_tile } else { 0 };
-    
-    println!("even tiles score: {} (4x: {})", even_tiles_score, 4*even_tiles_score);
-    println!("odd tiles score: {} (4x: {})", odd_tiles_score, 4*odd_tiles_score);
-    
-    println!("estimated answer: {}", ((score_per_complete_even_tile as f64 + score_per_complete_odd_tile as f64)) / (full_tile as f64 * full_tile as f64) * N as f64 * N as f64);
-    
-    let ans = 4 * (even_tiles_score + odd_tiles_score) + permiteter_score + score_per_complete_even_tile;
-    
-    println!("ans {}", ans);
-    ans
+
+    let start = (start.0 as i64, start.1 as i64);
+
+    reachable.insert((0, 0));
+
+    let y_dim = data.dim().0 as i64;
+    let x_dim = data.dim().1 as i64;
+
+    assert!(y_dim == x_dim, "solution assumes dims are the same");
+
+    let full_tile = x_dim;
+    let half_tile = full_tile / 2;
+    let tile_and_a_half = full_tile + half_tile;
+    let half_tile_plus_one = half_tile + 1;
+    let tile_and_a_half_plus_one = tile_and_a_half + 1;
+
+    // The least number of steps we can do is 2*full tiles + half tile
+    let n_steps = (5 * x_dim) / 2;
+
+    for _ in 0..n_steps {
+        newly_reachable.clear();
+
+        for itm in reachable.iter() {
+            let x = itm.1;
+            let y = itm.0;
+
+            let up = (y - 1, x);
+            let down = (y + 1, x);
+            let left = (y, x - 1);
+            let right = (y, x + 1);
+
+            let up_rem = (
+                (up.0 + start.0).rem_euclid(y_dim) as usize,
+                (up.1 + start.1).rem_euclid(x_dim) as usize,
+            );
+            let down_rem = (
+                (down.0 + start.0).rem_euclid(y_dim) as usize,
+                (down.1 + start.1).rem_euclid(x_dim) as usize,
+            );
+            let left_rem = (
+                (left.0 + start.0).rem_euclid(y_dim) as usize,
+                (left.1 + start.1).rem_euclid(x_dim) as usize,
+            );
+            let right_rem = (
+                (right.0 + start.0).rem_euclid(y_dim) as usize,
+                (right.1 + start.1).rem_euclid(x_dim) as usize,
+            );
+
+            if data.get(up_rem) == Some(&b'.') {
+                newly_reachable.insert(up);
+            }
+            if data.get(down_rem) == Some(&b'.') {
+                newly_reachable.insert(down);
+            }
+            if data.get(left_rem) == Some(&b'.') {
+                newly_reachable.insert(left);
+            }
+            if data.get(right_rem) == Some(&b'.') {
+                newly_reachable.insert(right);
+            }
+        }
+
+        std::mem::swap(&mut reachable, &mut newly_reachable);
+    }
+
+    // The four tile scores at the "corners" of the reachable area.
+    let extremity_1 = reachable
+        .iter()
+        .filter(|(y, x)| *x >= -half_tile && *x <= half_tile && *y >= tile_and_a_half_plus_one)
+        .count() as u64;
+    let extremity_2 = reachable
+        .iter()
+        .filter(|(y, x)| *x >= -half_tile && *x <= half_tile && *y <= -tile_and_a_half_plus_one)
+        .count() as u64;
+    let extremity_3 = reachable
+        .iter()
+        .filter(|(y, x)| *y >= -half_tile && *y <= half_tile && *x >= tile_and_a_half_plus_one)
+        .count() as u64;
+    let extremity_4 = reachable
+        .iter()
+        .filter(|(y, x)| *y >= -half_tile && *y <= half_tile && *x <= -tile_and_a_half_plus_one)
+        .count() as u64;
+
+    let sc1 = reachable
+        .iter()
+        .filter(|(y, x)| *x >= half_tile_plus_one && *y >= tile_and_a_half_plus_one)
+        .count() as u64;
+    let sc2 = reachable
+        .iter()
+        .filter(|(y, x)| *x >= half_tile_plus_one && *y <= -tile_and_a_half_plus_one)
+        .count() as u64;
+    let sc3 = reachable
+        .iter()
+        .filter(|(y, x)| *x <= -half_tile_plus_one && *y >= tile_and_a_half_plus_one)
+        .count() as u64;
+    let sc4 = reachable
+        .iter()
+        .filter(|(y, x)| *x <= -half_tile_plus_one && *y <= -tile_and_a_half_plus_one)
+        .count() as u64;
+
+    let lc1 = reachable
+        .iter()
+        .filter(|(y, x)| {
+            *x >= half_tile_plus_one
+                && *x <= tile_and_a_half
+                && *y >= half_tile_plus_one
+                && *y <= tile_and_a_half
+        })
+        .count() as u64;
+    let lc2 = reachable
+        .iter()
+        .filter(|(y, x)| {
+            *x >= -tile_and_a_half
+                && *x <= -half_tile_plus_one
+                && *y >= half_tile_plus_one
+                && *y <= tile_and_a_half
+        })
+        .count() as u64;
+    let lc3 = reachable
+        .iter()
+        .filter(|(y, x)| {
+            *x >= half_tile_plus_one
+                && *x <= tile_and_a_half
+                && *y >= -tile_and_a_half
+                && *y <= -half_tile_plus_one
+        })
+        .count() as u64;
+    let lc4 = reachable
+        .iter()
+        .filter(|(y, x)| {
+            *x >= -tile_and_a_half
+                && *x <= -half_tile_plus_one
+                && *y >= -tile_and_a_half
+                && *y <= -half_tile_plus_one
+        })
+        .count() as u64;
+
+    let even_tile_score = reachable
+        .iter()
+        .filter(|(y, x)| *x >= -half_tile && *x <= half_tile && *y >= -half_tile && *y <= half_tile)
+        .count() as u64;
+
+    let odd_tile_score = reachable
+        .iter()
+        .filter(|(y, x)| {
+            *x >= half_tile_plus_one && *x <= tile_and_a_half && *y >= -half_tile && *y <= half_tile
+        })
+        .count() as u64;
+
+    RepetitionParameters {
+        extremities: [extremity_1, extremity_2, extremity_3, extremity_4],
+        inner_corners: [lc1, lc2, lc3, lc4],
+        outer_corners: [sc1, sc2, sc3, sc4],
+        even_tile_score,
+        odd_tile_score,
+    }
+}
+
+fn calculate_p2<const N: u64>(data: &Array2<u8>) -> u64 {
+    let parameters = get_repetition_parameters(data);
+
+    let full_tile = data.dim().0 as u64;
+    let n_over_ft = N / full_tile;
+
+    let perimeter_score = (n_over_ft - 1) * parameters.inner_corners.iter().sum::<u64>()
+        + n_over_ft * parameters.outer_corners.iter().sum::<u64>();
+
+    let t = N / (full_tile * 2);
+    let num_even = (t - 1) * t;
+    let num_odd = t * t;
+
+    let even_tiles_score = num_even * parameters.even_tile_score;
+    let odd_tiles_score = num_odd * parameters.odd_tile_score;
+
+    let extremes_correction = parameters.extremities.iter().sum::<u64>();
+
+    4 * (even_tiles_score + odd_tiles_score)
+        + perimeter_score
+        + extremes_correction
+        + parameters.even_tile_score
 }
 
 fn main() {
@@ -197,30 +285,15 @@ mod tests {
     }
 
     #[test]
-    fn test_p2_example() {
-        // assert_eq!(calculate_p2::<6>(&parse(EXAMPLE_DATA)), 16);
-        assert_eq!(calculate_p2::<10>(&parse(EXAMPLE_DATA)), 50);
-        assert_eq!(calculate_p2::<50>(&parse(EXAMPLE_DATA)), 1594);
-        assert_eq!(calculate_p2::<100>(&parse(EXAMPLE_DATA)), 6536);
-        assert_eq!(calculate_p2::<500>(&parse(EXAMPLE_DATA)), 167004);
-        assert_eq!(calculate_p2::<1000>(&parse(EXAMPLE_DATA)), 668697);
-        assert_eq!(calculate_p2::<5000>(&parse(EXAMPLE_DATA)), 16733044);
-    }
-
-    #[test]
     fn test_p1_real() {
         assert_eq!(calculate_p1::<64>(&parse(REAL_DATA)), 3649);
     }
 
     #[test]
     fn test_p2_real() {
-        assert!(calculate_p2::<26501365>(&parse(REAL_DATA)) < 614257985123921);
-        assert!(calculate_p2::<26501365>(&parse(REAL_DATA)) < 614251892657121);
-        assert!(calculate_p2::<26501365>(&parse(REAL_DATA)) < 613473106432011);
-        assert!(calculate_p2::<26501365>(&parse(REAL_DATA)) != 613456484430265);
+        assert_eq!(calculate_p2::<26501365>(&parse(REAL_DATA)), 612941134797232);
     }
 
-    /*
     #[cfg(feature = "bench")]
     mod benches {
         extern crate test;
@@ -237,5 +310,5 @@ mod tests {
                 (p1, p2)
             });
         }
-    }*/
+    }
 }

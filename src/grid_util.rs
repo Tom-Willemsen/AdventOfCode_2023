@@ -23,7 +23,11 @@ pub fn make_bool_grid<const TRUE_CHAR: u8>(raw_inp: &str) -> Array2<bool> {
 
     Array2::from_shape_vec(
         ((raw_inp.trim().len() + 1) / (columns + 1), columns),
-        raw_inp.bytes().filter(|&x| x != b'\n').map(|b| b == TRUE_CHAR).collect(),
+        raw_inp
+            .bytes()
+            .filter(|&x| x != b'\n')
+            .map(|b| b == TRUE_CHAR)
+            .collect(),
     )
     .expect("can't make array")
 }

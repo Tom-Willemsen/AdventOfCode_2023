@@ -184,17 +184,17 @@ mod tests {
     fn test_p1_example() {
         assert_eq!(calculate::<1>(&parse(EXAMPLE_DATA)), 94);
     }
-    
+
     #[test]
     fn test_p2_example() {
         assert_eq!(calculate::<2>(&parse(EXAMPLE_DATA)), 154);
     }
-    
+
     #[test]
     fn test_p1_real() {
         assert_eq!(calculate::<1>(&parse(REAL_DATA)), 2282);
     }
-    
+
     #[test]
     fn test_p2_real() {
         assert_eq!(calculate::<2>(&parse(REAL_DATA)), 6646);
@@ -211,8 +211,8 @@ mod tests {
         fn bench(b: &mut Bencher) {
             b.iter(|| {
                 let data = parse(black_box(REAL_DATA));
-                let p1 = calculate_p1(&data);
-                let p2 = calculate_p2(&data);
+                let p1 = calculate::<1>(&data);
+                let p2 = calculate::<2>(&data);
                 (p1, p2)
             });
         }

@@ -305,8 +305,8 @@ mod tests {
         fn bench(b: &mut Bencher) {
             b.iter(|| {
                 let data = parse(black_box(REAL_DATA));
-                let p1 = calculate_p1(&data);
-                let p2 = calculate_p2(&data);
+                let p1 = calculate_p1::<64>(&data);
+                let p2 = calculate_p2::<26501365>(&data);
                 (p1, p2)
             });
         }

@@ -1,8 +1,9 @@
 #![cfg_attr(feature = "bench", feature(test))]
 use advent_of_code_2023::{Cli, Parser};
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use std::fs;
 
-#[derive(Eq, PartialEq, Debug, Clone, Copy)]
+#[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
 struct Brick {
     x1: i64,
     y1: i64,
@@ -144,17 +145,17 @@ fn settled_bricks(data: &[Brick]) -> Vec<Brick> {
     brick_pile
 }
 
-fn count_falling_bricks(data: &[Brick]) -> i64 {
+fn count_falling_bricks(data: &[&Brick], min_z: i64, max_z: i64) -> i64 {
     data.iter()
-        .filter(|b| b.min_z() > 1)
-        .filter_map(|b| {
+        .filter(|&b| b.min_z() > min_z && b.min_z() <= max_z)
+        .filter_map(|&b| {
             let mut cloned_b = *b;
 
             cloned_b.adjust_z_relative(-1);
 
             let would_conflict = data
                 .iter()
-                .filter(|ob| ob != &b)
+                .filter(|&&ob| ob != b)
                 .any(|ob| ob.overlaps_with(&cloned_b));
 
             if !would_conflict {
@@ -162,9 +163,11 @@ fn count_falling_bricks(data: &[Brick]) -> i64 {
                     count_falling_bricks(
                         &data
                             .iter()
-                            .filter(|ob| ob != &b)
+                            .filter(|&&ob| ob != b)
                             .copied()
                             .collect::<Vec<_>>(),
+                        min_z,
+                        max_z.max(b.max_z() + 1),
                     ) + 1,
                 )
             } else {
@@ -177,27 +180,36 @@ fn count_falling_bricks(data: &[Brick]) -> i64 {
 
 fn calculate(data: &[Brick]) -> (i64, i64) {
     let pile = settled_bricks(data);
-    let mut p1 = 0;
-    let mut p2 = 0;
 
-    for removed_brick in pile.iter() {
-        let unsupported = pile
-            .iter()
-            .filter(|b| b.is_supported_by(removed_brick))
-            .find(|b| !b.is_supported(&pile, removed_brick));
+    let biggest_brick_z = data
+        .iter()
+        .map(|b| b.max_z() - b.min_z() + 1)
+        .max()
+        .unwrap_or(1);
 
-        if let Some(_zapped) = unsupported {
-            let mut zapped = pile.clone();
-            zapped.retain(|b| b != removed_brick);
+    pile.par_iter()
+        .map(|removed_brick| {
+            let unsupported = pile
+                .iter()
+                .filter(|b| b.is_supported_by(removed_brick))
+                .find(|b| !b.is_supported(&pile, removed_brick));
 
-            let fallers = count_falling_bricks(&zapped);
-            p2 += fallers;
-        } else {
-            p1 += 1;
-        }
-    }
+            if let Some(_zapped) = unsupported {
+                let zapped = pile
+                    .iter()
+                    .filter(|&b| b != removed_brick)
+                    .filter(|&b| b.min_z() > removed_brick.min_z() - biggest_brick_z)
+                    .collect::<Vec<_>>();
 
-    (p1, p2)
+                let min_z = 1.max(removed_brick.min_z());
+                let max_z = min_z + biggest_brick_z;
+                let fallers = count_falling_bricks(&zapped, min_z, max_z);
+                (0, fallers)
+            } else {
+                (1, 0)
+            }
+        })
+        .reduce(|| (0, 0), |a, b| (a.0 + b.0, a.1 + b.1))
 }
 
 fn main() {
@@ -248,9 +260,7 @@ mod tests {
         fn bench(b: &mut Bencher) {
             b.iter(|| {
                 let data = parse(black_box(REAL_DATA));
-                let p1 = calculate_p1(&data);
-                let p2 = calculate_p2(&data);
-                (p1, p2)
+                calculate(&data)
             });
         }
     }

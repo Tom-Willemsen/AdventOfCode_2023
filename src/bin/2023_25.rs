@@ -23,10 +23,10 @@ fn dodgy_min_cut(edges: &[(&str, &str)]) -> Option<usize> {
             let b_in_graph = graph.contains(b);
             if a_in_graph != b_in_graph {
                 if !a_in_graph {
-                    *candidate_vertices.entry(&a).or_insert(0) += 1;
+                    *candidate_vertices.entry(a).or_insert(0) += 1;
                 }
                 if !b_in_graph {
-                    *candidate_vertices.entry(&b).or_insert(0) += 1;
+                    *candidate_vertices.entry(b).or_insert(0) += 1;
                 }
             }
         }

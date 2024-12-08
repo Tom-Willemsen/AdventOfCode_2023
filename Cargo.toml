@@ -7,8 +7,8 @@ edition = "2021"
 clap = { version = "4", features = ["derive"] }
 ahash = { version = "*" }
 rayon = { version = "1" }
-ndarray = { version = "*", features = ["rayon"] }
-ndarray-linalg = { version = "*", features = ["intel-mkl-static"] }
+ndarray = { version = "0.15.6", features = ["rayon"] }
+ndarray-linalg = { version = "0.16.0", features = ["intel-mkl-static"] }
 modinverse = { version = "*" }
 mod_exp = { version = "*" }
 bitvec = { version = "1" }

@@ -18,9 +18,9 @@ fn longest_path(
     pos: (usize, usize),
     target: (usize, usize),
     cost_so_far: usize,
-) -> usize {
+) -> Option<usize> {
     if pos == target {
-        return cost_so_far;
+        return Some(cost_so_far);
     }
 
     visited.insert(pos);
@@ -29,9 +29,9 @@ fn longest_path(
         .get(&pos)
         .expect("landed at an invalid position?")
         .par_iter()
-        .map(|(new_pos, cost)| {
+        .filter_map(|(new_pos, cost)| {
             if visited.contains(new_pos) {
-                0
+                None
             } else {
                 longest_path(
                     cost_map,
@@ -42,8 +42,7 @@ fn longest_path(
                 )
             }
         })
-        .max()
-        .unwrap_or(0);
+        .max();
 
     visited.remove(&pos);
 
@@ -164,7 +163,20 @@ fn calculate<const PART: u8>(data: &Array2<u8>) -> usize {
     let cost_map = make_cost_map::<PART>(data, &decision_points);
     let mut visited = AHashSet::default();
 
-    longest_path(&cost_map, &mut visited, start, end, 0)
+    // There is only one route, which is constant, from start to a decision point, and
+    // also from end to a decision point. This lets us prune search space somewhat, by
+    // just adding these offsets and then eliminating start/end from the graph.
+    let real_start = pathfind_to_any(data, start, (start.0 + 1, start.1), &decision_points);
+    let real_end = pathfind_to_any(data, start, (end.0 - 1, end.1), &decision_points);
+
+    longest_path(
+        &cost_map,
+        &mut visited,
+        real_start.0,
+        real_end.0,
+        real_start.1 + real_end.1,
+    )
+    .expect("no solution")
 }
 
 fn main() {
@@ -200,10 +212,10 @@ mod tests {
         assert_eq!(calculate::<1>(&parse(REAL_DATA)), 2282);
     }
 
-    // #[test]
-    // fn test_p2_real() {
-    //     assert_eq!(calculate::<2>(&parse(REAL_DATA)), 6646);
-    // }
+    #[test]
+    fn test_p2_real() {
+        assert_eq!(calculate::<2>(&parse(REAL_DATA)), 6646);
+    }
 
     #[cfg(feature = "bench")]
     mod benches {
